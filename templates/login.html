@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Đăng nhập – RAG Legal Assistant</title>
+<link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,600;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+<style>
+:root {
+  --navy:  #0B1F3A; --navy2: #132843;
+  --teal:  #0A8C7E; --teal2: #0DB4A2;
+  --gold:  #E8A020; --white: #F7F9FC;
+  --gray:  #8A97A8; --border:#D0D9E6;
+  --red:   #D63B3B; --radius:10px;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{height:100%;font-family:'DM Sans',sans-serif;}
+body{
+  background:var(--navy);
+  display:grid;place-items:center;min-height:100vh;
+  background-image: radial-gradient(ellipse at 20% 50%, rgba(10,140,126,0.12) 0%, transparent 60%),
+                    radial-gradient(ellipse at 80% 20%, rgba(232,160,32,0.06) 0%, transparent 50%);
+}
+.card{
+  background:var(--navy2);
+  border:1px solid rgba(255,255,255,0.08);
+  border-radius:18px;
+  padding:40px 36px;
+  width:100%;max-width:400px;
+  box-shadow:0 20px 60px rgba(0,0,0,0.4);
+}
+.logo{
+  text-align:center;margin-bottom:28px;
+}
+.logo .icon{font-size:36px;margin-bottom:8px;}
+.logo h1{
+  font-family:'Crimson Pro',serif;
+  font-size:24px;font-weight:600;
+  color:var(--teal2);letter-spacing:.3px;
+}
+.logo p{font-size:13px;color:var(--gray);margin-top:4px;}
+
+label{
+  display:block;font-size:12px;font-weight:500;
+  color:var(--gray);text-transform:uppercase;letter-spacing:.5px;
+  margin-bottom:6px;margin-top:18px;
+}
+input{
+  width:100%;padding:12px 14px;
+  background:rgba(255,255,255,0.05);
+  border:1.5px solid rgba(255,255,255,0.1);
+  border-radius:8px;color:var(--white);
+  font-size:14px;font-family:'DM Sans',sans-serif;
+  transition:border-color .18s;
+}
+input:focus{outline:none;border-color:var(--teal2);background:rgba(255,255,255,0.07);}
+input::placeholder{color:rgba(255,255,255,0.2);}
+
+.btn-login{
+  width:100%;margin-top:24px;
+  padding:13px;background:var(--teal);
+  color:var(--white);border:none;border-radius:var(--radius);
+  font-size:15px;font-weight:600;font-family:'DM Sans',sans-serif;
+  cursor:pointer;transition:background .18s;
+}
+.btn-login:hover{background:var(--teal2);}
+
+.error-msg{
+  display:none;margin-top:14px;
+  background:rgba(214,59,59,0.12);
+  border:1px solid rgba(214,59,59,0.3);
+  color:#FF8080;border-radius:8px;
+  padding:10px 14px;font-size:13px;text-align:center;
+}
+.hint{
+  margin-top:20px;padding-top:16px;
+  border-top:1px solid rgba(255,255,255,0.06);
+  font-size:11.5px;color:var(--gray);text-align:center;line-height:1.7;
+}
+.hint strong{color:rgba(255,255,255,0.5);}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">
+    <div class="icon">⚖️</div>
+    <h1>RAG Legal Assistant</h1>
+    <p>Trợ lý pháp luật AI — Luật Doanh nghiệp</p>
+  </div>
+
+  <form id="loginForm">
+    <label>Tên đăng nhập</label>
+    <input type="text" id="username" placeholder="Nhập tên đăng nhập" required/>
+
+    <label>Mật khẩu</label>
+    <input type="password" id="password" placeholder="Nhập mật khẩu" required/>
+
+    <button type="submit" class="btn-login">Đăng nhập</button>
+  </form>
+
+  <div class="error-msg" id="errMsg">❌ Sai tên đăng nhập hoặc mật khẩu</div>
+
+  <div class="hint">
+    Sinh viên thử: <strong>testStudent1 / 123456P@ss</strong><br/>
+    Giảng viên thử: <strong>teacher1 / Teacher@123</strong>
+  </div>
+</div>
+
+<script>
+document.getElementById("loginForm").addEventListener("submit", async function(e) {
+  e.preventDefault();
+  const username = document.getElementById("username").value;
+  const password = document.getElementById("password").value;
+  document.getElementById("errMsg").style.display = "none";
+
+  try {
+    const res  = await fetch("/login", {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({ student_name: username, password })
+    });
+    if (res.status === 401) {
+      document.getElementById("errMsg").style.display = "block";
+      return;
+    }
+    const data = await res.json();
+    if (data.status === "success") {
+      window.location.href = "/";
+    } else {
+      document.getElementById("errMsg").style.display = "block";
+    }
+  } catch(err) {
+    document.getElementById("errMsg").textContent = "❌ Lỗi kết nối server";
+    document.getElementById("errMsg").style.display = "block";
+  }
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,43 @@
+# Core
+numpy==1.26.4
+
+# LangChain (modern ecosystem)
+langchain==0.2.14
+langchain-core==0.2.32
+langchain-community==0.2.12
+langsmith==0.1.120
+
+# New split packages (NO deprecated)
+langchain-huggingface==0.0.3
+langchain-chroma==0.1.2
+
+# Groq
+langchain-groq==0.1.9
+
+# Vector DB
+chromadb==0.4.24
+posthog==3.5.0
+
+# Embedding
+sentence-transformers==2.7.0
+
+# PDF
+pypdf==4.2.0
+
+# Backend
+flask==3.0.3
+
+# Tokenizer
+tiktoken==0.7.0
+
+# datasets
+datasets==2.19.1
+
+# Excel support (for build_db_from_dataset.py and evaluate_rag.py)
+openpyxl==3.1.5
+
+# OCR
+vietocr==0.3.13
+pdf2image==1.17.0
+# opencv for accurate text line detection (headless = no GUI needed)
+opencv-python-headless==4.11.0.86

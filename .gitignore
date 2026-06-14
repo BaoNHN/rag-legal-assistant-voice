@@ -1,0 +1,13 @@
+/chroma_db/
+/rag_env/
+/chat.db
+groqkey.txt
+groqkeyss.txt
+.device_config
+.idea/
+terminal.txt
+ocr_raw_output.txt
+/poppler/
+__pycache__/
+*.pyc
+*.pyo

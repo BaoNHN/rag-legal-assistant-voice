@@ -1,0 +1,52 @@
+<!--
+  index_voice_patch.html
+  ══════════════════════════════════════════════════════════════════════════════
+  INSTRUCTIONS: Replace the existing <div class="input-area"> block inside
+  your templates/index.html with the block below.
+  Everything else in index.html stays the same.
+  ══════════════════════════════════════════════════════════════════════════════
+-->
+
+    <div class="input-area">
+      <!-- ── Voice toggle bar (shown above the text input) ── -->
+      <div id="voiceBar" style="display:flex;align-items:center;gap:8px;margin-bottom:6px;padding:6px 10px;background:rgba(255,255,255,0.06);border-radius:8px;font-size:13px;color:#ccc;">
+        <span style="font-size:12px;opacity:.7;">Giọng đọc:</span>
+        <select id="ttsVoiceSelect" style="background:#1e1e2e;color:#ccc;border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:3px 8px;font-size:12px;">
+          <option value="vi-VN-HoaiMyNeural">HoaiMy (Nữ)</option>
+          <option value="vi-VN-NamMinhNeural">NamMinh (Nam)</option>
+          <option value="en-US-JennyNeural">Jenny (EN)</option>
+        </select>
+        <label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer;">
+          <input type="checkbox" id="useRvcCheck" checked style="cursor:pointer;">
+          Dùng RVC
+        </label>
+        <label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer;">
+          <input type="checkbox" id="autoSpeakCheck" checked style="cursor:pointer;">
+          Tự phát âm
+        </label>
+        <span id="rvcStatus" style="margin-left:auto;font-size:11px;opacity:.6;"></span>
+      </div>
+
+      <!-- ── Main input row ── -->
+      <div style="display:flex;gap:6px;align-items:center;">
+        <!-- Mic button -->
+        <button id="micBtn" title="Nhấn để ghi âm" onclick="toggleMic()"
+          style="width:40px;height:40px;border-radius:50%;border:none;background:rgba(255,255,255,0.1);color:white;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background .2s;">
+          <span class="material-icons" style="font-size:20px;">mic</span>
+        </button>
+
+        <input id="chatInput" type="text" placeholder="Nhập câu hỏi về Luật Doanh nghiệp… hoặc nhấn mic 🎙"/>
+
+        <button id="sendButton">
+          <span class="material-icons">send</span> Gửi
+        </button>
+      </div>
+
+      <!-- Recording status indicator -->
+      <div id="recordingStatus" style="display:none;font-size:12px;color:#f87171;margin-top:4px;padding-left:48px;">
+        <span style="animation:blink 1s infinite">● </span>Đang ghi âm… nhấn mic lần nữa để dừng
+      </div>
+    </div>
+
+    <!-- Hidden audio player for TTS/RVC playback -->
+    <audio id="voicePlayer" style="display:none;" controls></audio>

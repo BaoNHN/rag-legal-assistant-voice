@@ -1,0 +1,13 @@
+# ── Voice feature dependencies ────────────────────────────────────────────────
+# Add these to your existing requirements.txt
+# Install with:  pip install -r requirements_voice.txt
+
+openai-whisper>=20231117     # ASR (Whisper STT)
+edge-tts>=6.1.9              # TTS (Microsoft neural voices)
+requests>=2.31.0             # HTTP client for RVC Colab tunnel
+ffmpeg-python>=0.2.0         # Audio preprocessing (used by Whisper internally)
+pydub>=0.25.1                # Audio format conversion
+
+# Optional — only needed if you run RVC locally instead of on Colab
+# torch>=2.0.0
+# fairseq
