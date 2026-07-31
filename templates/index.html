@@ -2,7 +2,7 @@
 <html lang="vi">
 <head>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" crossorigin="anonymous"/>
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}"/>
+  <link rel="stylesheet" href="/static/style.css"/>
   <meta charset="utf-8"/>
   <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
   <title>RAG Legal Assistant</title>
@@ -31,6 +31,126 @@
     }
     .btn-import-law.visible { display: block; }
 
+    .btn-manage-account {
+      display: none;
+      width: 90%;
+      margin-right: 30px;
+      margin-top: 8px;
+      padding: 9px 10px;
+      border: 1.5px solid rgb(16 15 15 / 0.5);
+      background: #343541;
+      color: white;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      text-align: center;
+      transition: all .18s;
+      text-decoration: none;
+    }
+    .btn-manage-account:hover {
+      background: #40414a;
+      border-color: #D63B3B;
+    }
+    .btn-manage-account.visible { display: block; }
+
+    .btn-manage-law {
+      display: none;
+      width: 90%;
+      margin-right: 30px;
+      margin-top: 8px;
+      padding: 9px 10px;
+      border: 1.5px solid rgb(16 15 15 / 0.5);
+      background: #343541;
+      color: white;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      text-align: center;
+      transition: all .18s;
+      text-decoration: none;
+    }
+    .btn-manage-law:hover {
+      background: #40414a;
+      border-color: #0DB4A2;
+    }
+    .btn-manage-law.visible { display: block; }
+
+    .btn-my-voice {
+      display: block;
+      width: 90%;
+      margin-right: 30px;
+      margin-top: 8px;
+      padding: 9px 10px;
+      border: 1.5px solid rgb(16 15 15 / 0.5);
+      background: #343541;
+      color: white;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      text-align: center;
+      transition: all .18s;
+      text-decoration: none;
+    }
+    .btn-my-voice:hover {
+      background: #40414a;
+      border-color: #0DB4A2;
+    }
+
+    .btn-admin-voice {
+      display: none;
+      width: 90%;
+      margin-right: 30px;
+      margin-top: 8px;
+      padding: 9px 10px;
+      border: 1.5px solid rgb(16 15 15 / 0.5);
+      background: #343541;
+      color: white;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      text-align: center;
+      transition: all .18s;
+      text-decoration: none;
+    }
+    .btn-admin-voice:hover {
+      background: #40414a;
+      border-color: #D63B3B;
+    }
+    .btn-admin-voice.visible { display: block; }
+
+    /* Voice select bar above chat input */
+    .voice-select-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 6px;
+      padding: 6px 10px;
+      background: rgba(0,0,0,0.04);
+      border-radius: 8px;
+      font-size: 13px;
+      color: #555;
+    }
+    .voice-select-bar select {
+      background: white;
+      color: #333;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      padding: 3px 8px;
+      font-size: 12px;
+      max-width: 200px;
+    }
+    .voice-select-bar a {
+      margin-left: auto;
+      font-size: 11.5px;
+      color: #6200EA;
+      text-decoration: none;
+    }
+    .voice-select-bar a:hover { text-decoration: underline; }
+
     /* Role badge in sidebar */
     .role-badge {
       display: inline-block;
@@ -42,9 +162,45 @@
       vertical-align: middle;
     }
     .role-badge.teacher {
-      background: rgba(232,160,32,0.2);
+      background: whitesmoke;
       color: #E8A020;
+      border: 1.5px solid #E8A020;
     }
+    .role-badge.admin {
+      background: whitesmoke;
+      color: #D63B3B;
+      border: 1.5px solid #D63B3B;
+    }
+
+    /* Voice notification bell */
+    .notif-wrap { position: relative; display: inline-block; float: right; margin-right: 8px; }
+    .notif-bell {
+      background: rgba(255,255,255,0.1); border: none; color: white;
+      padding: 6px 10px; border-radius: 6px; cursor: pointer; font-size: 15px; position: relative;
+    }
+    .notif-bell:hover { background: rgba(255,255,255,0.18); }
+    .notif-badge {
+      position: absolute; top: -4px; right: -4px; min-width: 16px; height: 16px; padding: 0 3px;
+      background: #D63B3B; color: white; font-size: 10px; font-weight: 700; border-radius: 999px;
+      display: none; align-items: center; justify-content: center; line-height: 1;
+    }
+    .notif-badge.visible { display: flex; }
+    .notif-dropdown {
+      display: none; position: absolute; top: 40px; right: 0; width: 320px; max-height: 380px;
+      overflow-y: auto; background: #2b2c33; border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,0.35); z-index: 50; text-align: left;
+    }
+    .notif-dropdown.open { display: block; }
+    .notif-header {
+      padding: 10px 14px; font-size: 12.5px; font-weight: 600; color: #cfcfda;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+    }
+    .notif-item {
+      padding: 10px 14px; font-size: 12.5px; color: #e8e8ec; border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    .notif-item:last-child { border-bottom: none; }
+    .notif-time { font-size: 11px; color: #9a9aa8; margin-top: 3px; }
+    .notif-empty { padding: 18px 14px; font-size: 12.5px; color: #9a9aa8; text-align: center; }
   </style>
 </head>
 <body>
@@ -53,9 +209,25 @@
   <aside class="sidebar">
     <div class="sidebar-header">
       <button class="new-chat">+ New Chat</button>
-      <!-- Import Law button — shown only for teachers via JS -->
+      <!-- Import Law button — shown for teachers & admins via JS -->
       <a href="/import" class="btn-import-law" id="importLawBtn">
         📥 Import Law
+      </a>
+      <!-- Manage Account button — shown only for admins via JS -->
+      <a href="/manage_accounts" class="btn-manage-account" id="manageAccountBtn">
+        👤 Manage Account
+      </a>
+      <!-- Manage Law button — shown only for admins via JS -->
+      <a href="/manage_law" class="btn-manage-law" id="manageLawBtn">
+        🗂️ Manage Law
+      </a>
+      <!-- My Voice — visible to everyone, manages personal voice profiles -->
+      <a href="/voice" class="btn-my-voice" id="myVoiceBtn">
+        🎙 Giọng nói của tôi
+      </a>
+      <!-- Admin-only voice model management -->
+      <a href="/admin/voice_models" class="btn-admin-voice" id="adminVoiceBtn">
+        🛠 Quản lý mô hình giọng nói
       </a>
     </div>
     <div class="sidebar-chats" id="chat-list"></div>
@@ -66,70 +238,154 @@
       Chat Assistant
       <span id="roleBadge"></span>
       <button onclick="logout()" style="float:right;background:rgba(255,255,255,0.1);border:none;color:white;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:13px;">Logout</button>
-    </div>
-    <div class="container">
-      <div id="chatbox" class="chatbox"></div>
-      <div class="input-area">
-        <!-- ── Voice toggle bar ── -->
-        <div id="voiceBar" style="display:flex;align-items:center;gap:8px;margin-bottom:6px;padding:6px 10px;background:rgba(255,255,255,0.06);border-radius:8px;font-size:13px;color:#ccc;">
-          <span style="font-size:12px;opacity:.7;">Giọng đọc:</span>
-          <select id="ttsVoiceSelect" style="background:#1e1e2e;color:#ccc;border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:3px 8px;font-size:12px;">
-            <option value="vi-VN-HoaiMyNeural">HoaiMy (Nữ)</option>
-            <option value="vi-VN-NamMinhNeural">NamMinh (Nam)</option>
-            <option value="en-US-JennyNeural">Jenny (EN)</option>
-          </select>
-          <label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer;">
-            <input type="checkbox" id="useRvcCheck" checked style="cursor:pointer;">
-            Dùng RVC
-          </label>
-          <label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer;">
-            <input type="checkbox" id="autoSpeakCheck" checked style="cursor:pointer;">
-            Tự phát âm
-          </label>
-          <span id="rvcStatus" style="margin-left:auto;font-size:11px;opacity:.6;"></span>
+      <div class="notif-wrap">
+        <button class="notif-bell" id="notifBell" onclick="toggleNotifDropdown()" title="Thông báo giọng nói">
+          🔔<span class="notif-badge" id="notifBadge">0</span>
+        </button>
+        <div class="notif-dropdown" id="notifDropdown">
+          <div class="notif-header">Thông báo giọng nói</div>
+          <div id="notifList"></div>
         </div>
+      </div>
+    </div>
+    <div class="container" id="mainContainer">
 
-        <!-- ── Main input row ── -->
-        <div style="display:flex;gap:6px;align-items:center;">
-          <button id="micBtn" title="Nhấn để ghi âm" onclick="toggleMic()"
-            style="width:40px;height:40px;border-radius:50%;border:none;background:rgba(255,255,255,0.1);color:white;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background .2s;">
-            <span class="material-icons" style="font-size:20px;">mic</span>
-          </button>
-          <input id="chatInput" type="text" placeholder="Nhập câu hỏi về Luật Doanh nghiệp… hoặc nhấn mic 🎙"/>
+      <!-- Welcome screen (shown when no messages) -->
+      <div id="welcome-screen">
+        <h1 class="welcome-title">Chúng ta nên bắt đầu từ đâu?</h1>
+        <p class="welcome-subtitle">Đặt câu hỏi về Luật Doanh nghiệp 2020 – 2025</p>
+        <div class="suggestion-chips">
+          <button class="chip" data-prompt="Cổ đông là gì?">💡 Cổ đông là gì?</button>
+          <button class="chip" data-prompt="Thành lập công ty TNHH cần điều kiện gì?">🏢 Thành lập công ty TNHH</button>
+          <button class="chip" data-prompt="Doanh nghiệp tạm ngừng kinh doanh cần làm gì?">📋 Tạm ngừng kinh doanh</button>
+        </div>
+      </div>
+
+      <!-- Chatbox (shown when chatting) -->
+      <div id="chatbox" class="chatbox"></div>
+
+      <!-- Input bar — design unchanged -->
+      <div class="input-area-wrap">
+        <div class="voice-select-bar">
+          <span>🔊 Giọng đọc:</span>
+          <select id="voiceProfileSelect"></select>
+          <a href="/voice">Quản lý giọng nói của tôi →</a>
+        </div>
+        <div class="input-area">
+          <input id="chatInput" type="text" placeholder="Nhập câu hỏi về Luật Doanh nghiệp…"/>
           <button id="sendButton">
             <span class="material-icons">send</span> Gửi
           </button>
         </div>
-
-        <!-- Recording status -->
-        <div id="recordingStatus" style="display:none;font-size:12px;color:#f87171;margin-top:4px;padding-left:48px;">
-          <span style="animation:blink 1s infinite">● </span>Đang ghi âm… nhấn mic lần nữa để dừng
-        </div>
       </div>
 
-      <!-- Hidden audio player for TTS/RVC playback -->
-      <audio id="voicePlayer" style="display:none;" controls></audio>
+      <!-- Disclaimer text below input -->
+      <div id="disclaimer">Trợ lý pháp lý có thể mắc lỗi. Hãy kiểm tra các thông tin pháp lý quan trọng.</div>
+
     </div>
   </main>
 </div>
 
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/material-design-lite/1.3.0/material.indigo-pink.min.css"/>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/material-design-icons/3.0.1/iconfont/material-icons.css"/>
-<script src="{{ url_for('static', filename='script.js') }}"></script>
-<script src="{{ url_for('static', filename='voice.js') }}"></script>
+<script src="/static/script.js"></script>
 <script>
-// Show Import Law button and role badge if teacher
+// Show Import Law / Manage Account buttons and role badge based on role
 (async function() {
   try {
     const res  = await fetch("/session_info");
     const data = await res.json();
-    if (data.user_type === "teacher") {
+    const badge = document.getElementById("roleBadge");
+
+    if (data.user_type === "teacher" || data.user_type === "admin") {
       document.getElementById("importLawBtn").classList.add("visible");
-      const badge = document.getElementById("roleBadge");
+    }
+    if (data.user_type === "admin") {
+      document.getElementById("manageAccountBtn").classList.add("visible");
+      document.getElementById("manageLawBtn").classList.add("visible");
+      document.getElementById("adminVoiceBtn").classList.add("visible");
+      badge.innerHTML = '<span class="role-badge admin">Quản trị viên</span>';
+    } else if (data.user_type === "teacher") {
       badge.innerHTML = '<span class="role-badge teacher">Giảng viên</span>';
     }
   } catch(e) {}
 })();
+
+// Populate the voice-select dropdown (built-in voices + this user's own cloned voices)
+(async function loadVoiceProfiles() {
+  try {
+    const profiles = await fetch("/voice/profiles").then(r => r.json());
+    const select = document.getElementById("voiceProfileSelect");
+    if (!select || !Array.isArray(profiles)) return;
+
+    select.innerHTML = profiles.map(p => {
+      const label = p.kind === "builtin" ? p.name : `${p.name} (giọng riêng${p.status !== "ready" ? " — " + p.status : ""})`;
+      const disabled = p.kind === "cloned" && p.status !== "ready" ? "disabled" : "";
+      return `<option value="${p.id}" ${disabled}>${label}</option>`;
+    }).join("");
+
+    const defaultProfile = profiles.find(p => p.is_default) || profiles.find(p => p.kind === "builtin");
+    if (defaultProfile) select.value = defaultProfile.id;
+
+    window.__selectedVoiceProfileId = select.value;
+    select.addEventListener("change", () => {
+      window.__selectedVoiceProfileId = select.value;
+    });
+  } catch (e) {}
+})();
+
+// ── Voice notifications (bell) — e.g. clone-voice-station's manager deleted/
+// disabled this user's cloned voice ──────────────────────────────────────────
+let _notifDropdownOpen = false;
+
+function timeAgo(ts) {
+  const diffMin = Math.round((Date.now() / 1000 - ts) / 60);
+  if (diffMin < 1) return "vừa xong";
+  if (diffMin < 60) return `${diffMin} phút trước`;
+  const diffH = Math.round(diffMin / 60);
+  if (diffH < 24) return `${diffH} giờ trước`;
+  return new Date(ts * 1000).toLocaleDateString("vi-VN");
+}
+
+async function refreshNotifications() {
+  try {
+    const data = await fetch("/voice/notifications").then(r => r.json());
+    const badge = document.getElementById("notifBadge");
+    const count = data.unread_count || 0;
+    badge.textContent = count > 9 ? "9+" : count;
+    badge.classList.toggle("visible", count > 0);
+
+    const list = document.getElementById("notifList");
+    const notifications = data.notifications || [];
+    list.innerHTML = notifications.length
+      ? notifications.map(n => `
+          <div class="notif-item">
+            ${n.message.replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))}
+            <div class="notif-time">${timeAgo(n.created_at)}</div>
+          </div>
+        `).join("")
+      : '<div class="notif-empty">Chưa có thông báo nào.</div>';
+  } catch (e) {}
+}
+
+function toggleNotifDropdown() {
+  _notifDropdownOpen = !_notifDropdownOpen;
+  document.getElementById("notifDropdown").classList.toggle("open", _notifDropdownOpen);
+  if (_notifDropdownOpen) {
+    fetch("/voice/notifications/read", { method: "POST" })
+      .then(() => document.getElementById("notifBadge").classList.remove("visible"));
+  }
+}
+
+document.addEventListener("click", (e) => {
+  if (_notifDropdownOpen && !e.target.closest(".notif-wrap")) {
+    _notifDropdownOpen = false;
+    document.getElementById("notifDropdown").classList.remove("open");
+  }
+});
+
+refreshNotifications();
+setInterval(refreshNotifications, 30000);
 </script>
 </body>
 </html>

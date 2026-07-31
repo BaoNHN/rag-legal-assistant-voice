@@ -1,12 +1,10 @@
 # import_law_engine.py
-# Background worker: OCR a PDF and add to ChromaDB without clearing existing data.
-# Called by app.py via threading after /import_law POST.
+# Background worker: extract text (or OCR) a PDF and add to ChromaDB.
+# Auto-detects selectable PDFs and skips OCR when direct text extraction suffices.
 
 import os
 import threading
 import warnings
-import sqlite3, time
-import traceback
 import unicodedata, re as _re
 import cv2
 import numpy as np
@@ -20,6 +18,8 @@ from langchain_chroma import Chroma
 from vietocr.tool.predictor import Predictor
 from vietocr.tool.config import Cfg
 from PIL import ImageEnhance
+
+from database.database import upsert_import_chat
 
 warnings.filterwarnings("ignore", message=".*enable_nested_tensor.*", category=UserWarning)
 warnings.filterwarnings("ignore", message=".*batch_first.*", category=UserWarning)
@@ -173,62 +173,131 @@ def _ocr_page(detector, pil_image) -> str:
 
 
 # ── Segment full text into articles ──────────────────────────────────────────
-def _segment(full_text: str) -> list:
+def _segment(full_text: str) -> tuple:
+    """Split into one chunk per 'Điều X.' (legal article).
+
+    Returns (segments, matched_by_article). matched_by_article is False when
+    the article-boundary regex couldn't find enough headers and a fixed-size
+    fallback chunking was used instead — fallback chunks straddle article
+    boundaries and must NOT be tagged with a fabricated article number.
+    """
     clean = _re.sub(r'\n{3,}', '\n\n', full_text)
     clean = _re.sub(r'[ \t]+', ' ', clean).strip()
     pattern = r'(?:(?:^|\n)(?=Điều\s+\d+[a-z]?[.,]\s))'
     splits = _re.split(pattern, clean, flags=_re.MULTILINE)
     segs = [s.strip() for s in splits if len(s.strip()) > 50]
-    if len(segs) < 5:
-        # fallback: fixed chunks
-        size, overlap, segs = 3000, 300, []
-        i = 0
-        while i < len(clean):
-            segs.append(clean[i:i + size])
-            i += size - overlap
-    return segs
+    if len(segs) >= 5:
+        return segs, True
+
+    # fallback: fixed chunks — article boundaries could not be detected
+    size, overlap, segs = 3000, 300, []
+    i = 0
+    while i < len(clean):
+        segs.append(clean[i:i + size])
+        i += size - overlap
+    return segs, False
+
+
+# ── Direct text extraction (selectable PDFs) ─────────────────────────────────
+_MIN_CHARS_PER_PAGE = 150  # avg below this → treat as scanned, use OCR
+
+
+def _extract_text_pdf(pdf_path: str, total_pages: int):
+    """
+    Try to extract text directly with pypdf.
+    Returns {page_num: text} when the PDF has selectable text,
+    or None when it appears to be a scan (too few characters).
+    """
+    reader = PdfReader(pdf_path)
+    pages_text = {}
+    for i, page in enumerate(reader.pages, start=1):
+        raw = page.extract_text() or ""
+        text = _re.sub(r'[ \t]+', ' ', raw)
+        text = _re.sub(r'\n{3,}', '\n\n', text).strip()
+        pages_text[i] = text
+
+    avg_chars = sum(len(t) for t in pages_text.values()) / max(total_pages, 1)
+    return pages_text if avg_chars >= _MIN_CHARS_PER_PAGE else None
+
+
+def _extract_text_docx(docx_path: str) -> dict:
+    """Extract text from a .docx Word document. Returns {1: full_text}."""
+    from docx import Document as DocxDoc
+    doc = DocxDoc(docx_path)
+
+    lines = []
+    for para in doc.paragraphs:
+        text = para.text.strip()
+        if text:
+            lines.append(text)
+
+    # Also pull text from tables (law docs often have tabular articles)
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                text = cell.text.strip()
+                if text and text not in lines:
+                    lines.append(text)
+
+    return {1: "\n".join(lines)}
 
 
 # ── Main background job ───────────────────────────────────────────────────────
-def run_import(job_id: str, pdf_path: str, so_ky_hieu: str,
+def run_import(job_id: str, file_path: str, so_ky_hieu: str,
                loai_van_ban: str, nguon_thu_thap: str,
                student_id: int, db_conn_factory):
     """
-    Full pipeline: OCR → segment → embed → add to ChromaDB (no wipe).
-    Updates job status and creates/updates 'Import new law' chat on finish.
+    Full pipeline: auto-detect file type (PDF / DOCX) → extract text or OCR →
+    segment → embed → add to ChromaDB (no wipe).
     """
-    _set_job(job_id, status="running", message="Đang khởi động VietOCR…")
+    ext = os.path.splitext(file_path)[1].lower()
+    _set_job(job_id, status="running", message="Kiểm tra loại file…")
 
     try:
-        # ── 1. Load VietOCR ──
+        if ext == ".docx":
+            # ── DOCX: direct text extraction, no OCR needed ──
+            _set_job(job_id, message="File Word (.docx) — đang trích xuất văn bản…")
+            all_text_by_page = _extract_text_docx(file_path)
+            total_pages = 1
+            _set_job(job_id, message=f"Trích xuất DOCX hoàn tất ({len(all_text_by_page[1]):,} ký tự).")
+        else:
+            # ── PDF: try direct text, fall back to OCR ──
+            reader = PdfReader(file_path)
+            total_pages = len(reader.pages)
 
-        device = _detect_device()
-        cfg = Cfg.load_config_from_name('vgg_transformer')
-        cfg['device'] = device
-        cfg['predictor']['beamsearch'] = True
-        detector = Predictor(cfg)
-        _set_job(job_id, message=f"VietOCR loaded ({device.upper()}). Bắt đầu OCR…")
+            # ── 1. Try direct text extraction first ──
+            all_text_by_page = _extract_text_pdf(file_path, total_pages)
 
-        # ── 2. OCR ──
-        total_pages = len(PdfReader(pdf_path).pages)
-        all_text_by_page = {}
-        BATCH = 5
-        DPI = 250
+            if all_text_by_page:
+                _set_job(job_id, message=f"PDF văn bản số ({total_pages} trang). Trích xuất hoàn tất.")
+            else:
+                # ── 2. Fall back to VietOCR for scanned PDFs ──
+                _set_job(job_id, message="PDF scan — đang khởi động VietOCR…")
+                device = _detect_device()
+                cfg = Cfg.load_config_from_name('vgg_transformer')
+                cfg['device'] = device
+                cfg['predictor']['beamsearch'] = True
+                detector = Predictor(cfg)
+                _set_job(job_id, message=f"VietOCR loaded ({device.upper()}). Bắt đầu OCR…")
 
-        for batch_start in range(1, total_pages + 1, BATCH):
-            batch_end = min(batch_start + BATCH - 1, total_pages)
-            _set_job(job_id, message=f"OCR trang {batch_start}–{batch_end}/{total_pages}…")
+                all_text_by_page = {}
+                BATCH = 5
+                DPI = 250
 
-            kwargs = dict(dpi=DPI, first_page=batch_start, last_page=batch_end, fmt='jpeg')
-            if os.path.isdir(POPPLER_PATH):
-                kwargs['poppler_path'] = POPPLER_PATH
+                for batch_start in range(1, total_pages + 1, BATCH):
+                    batch_end = min(batch_start + BATCH - 1, total_pages)
+                    _set_job(job_id, message=f"OCR trang {batch_start}–{batch_end}/{total_pages}…")
 
-            pages = convert_from_path(pdf_path, **kwargs)
-            for i, pg in enumerate(pages):
-                all_text_by_page[batch_start + i] = _ocr_page(detector, pg)
-            del pages
+                    kwargs = dict(dpi=DPI, first_page=batch_start, last_page=batch_end, fmt='jpeg')
+                    if os.path.isdir(POPPLER_PATH):
+                        kwargs['poppler_path'] = POPPLER_PATH
 
-        # ── 3. Save raw OCR ──
+                    pages = convert_from_path(file_path, **kwargs)
+                    for i, pg in enumerate(pages):
+                        all_text_by_page[batch_start + i] = _ocr_page(detector, pg)
+                    del pages
+
+        # ── 3. Save raw text ──
         raw_txt = os.path.join(BASE_DIR, f"{so_ky_hieu.replace('/', '_')}_{nguon_thu_thap.replace(' ', '_')}.txt")
         with open(raw_txt, 'w', encoding='utf-8') as f:
             for p in sorted(all_text_by_page):
@@ -237,28 +306,40 @@ def run_import(job_id: str, pdf_path: str, so_ky_hieu: str,
         full_text = "\n".join(all_text_by_page[p] for p in sorted(all_text_by_page))
 
         # ── 4. Segment ──
-        _set_job(job_id, message="Phân đoạn văn bản pháp luật…")
-        segs = _segment(full_text)
+        _set_job(job_id, message=f"Phân đoạn văn bản pháp luật ({len(full_text):,} ký tự)…")
+        segs, matched_by_article = _segment(full_text)
+
+        if not matched_by_article:
+            _set_job(job_id, message=(
+                "⚠️ Không nhận diện được ranh giới 'Điều X.' trong văn bản — "
+                "đang dùng chế độ cắt đoạn dự phòng (3000 ký tự/đoạn). "
+                "Trích dẫn theo số Điều có thể không chính xác cho văn bản này."
+            ))
 
         # ── 5. Build documents ──
         docs = []
         for i, seg in enumerate(segs):
             m = _re.match(r'Điều\s+(\d+[a-z]?)[.,\s]', seg)
-            art_num = m.group(1) if m else str(i + 1)
             lines = [l.strip() for l in seg.split('\n') if l.strip()]
-            title = lines[0][:120] if lines else f"Điều {art_num}"
-            docs.append(Document(
-                page_content=seg,
-                metadata={
-                    "so_ky_hieu": so_ky_hieu,
-                    "loai_van_ban": loai_van_ban,
-                    "nguon_thu_thap": nguon_thu_thap,
-                    "title": title,
-                    "article_number": art_num,
-                    "char_count": len(seg),
-                    "segment_index": i,
-                }
-            ))
+            meta = {
+                "so_ky_hieu": so_ky_hieu,
+                "loai_van_ban": loai_van_ban,
+                "nguon_thu_thap": nguon_thu_thap,
+                "char_count": len(seg),
+                "segment_index": i,
+                "import_source": "law",
+            }
+            if m:
+                # Real article boundary — safe to tag with its true number.
+                art_num = m.group(1)
+                meta["article_number"] = art_num
+                meta["article_reference"] = f"Điều {art_num}"
+                meta["title"] = lines[0][:120] if lines else f"Điều {art_num}"
+            else:
+                # Fallback chunk with no detected header — do NOT fabricate an
+                # article number (segment index != real article number).
+                meta["title"] = lines[0][:120] if lines else f"Đoạn {i + 1}"
+            docs.append(Document(page_content=seg, metadata=meta))
 
         # ── 6. Add to ChromaDB (no wipe, skip existing so_ky_hieu) ──
         _set_job(job_id, message=f"Tải {len(docs)} đoạn lên ChromaDB…")
@@ -283,54 +364,34 @@ def run_import(job_id: str, pdf_path: str, so_ky_hieu: str,
             f"✅ Hoàn tất! Đã thêm {len(new_docs)} đoạn vào ChromaDB "
             f"(bỏ qua {skipped} đoạn trùng lặp)."
         )
+        if not matched_by_article:
+            result_msg += (
+                "\n⚠️ Lưu ý: không tách được theo 'Điều X.' — đã dùng cắt đoạn dự phòng, "
+                "trích dẫn số Điều có thể không chính xác cho văn bản này."
+            )
+
+        # Refresh the citation-source whitelist so the new so_ky_hieu becomes
+        # citable immediately (see engine.rag_engine.refresh_citation_sources).
+        from engine.rag_engine import refresh_citation_sources
+        refresh_citation_sources()
+
         _set_job(job_id, status="done", message=result_msg)
 
     except Exception as e:
-        _set_job(job_id, status="failed", message=f"❌ Lỗi hệ thống.")
+        import traceback
+        traceback.print_exc()
+        _set_job(job_id, status="failed", message=f"❌ Lỗi: {e}")
 
     finally:
         # ── 7. Create/update 'Import new law' chat ──
         try:
-            _upsert_import_chat(student_id, job_id, db_conn_factory)
+            msg = get_job(job_id).get("message", "Xử lý hoàn tất.")
+            upsert_import_chat(student_id, msg)
         except Exception:
             pass
-        # Cleanup temp PDF
+        # Cleanup temp file
         try:
-            if os.path.exists(pdf_path):
-                os.remove(pdf_path)
+            if os.path.exists(file_path):
+                os.remove(file_path)
         except Exception:
             pass
-
-
-def _upsert_import_chat(student_id: int, job_id: str, db_conn_factory):
-    """Create 'Import new law' chat if not exists, add result message."""
-    conn = db_conn_factory()
-    c = conn.cursor()
-
-    CHAT_TITLE = "Import new law"
-
-    # Find existing chat with this title for this student
-    c.execute(
-        "SELECT id FROM chats WHERE student_id=? AND title=? AND role=1 ORDER BY created_at DESC LIMIT 1",
-        (student_id, CHAT_TITLE)
-    )
-    row = c.fetchone()
-
-    if row:
-        chat_id = row[0]
-    else:
-        chat_id = f"import_{int(time.time() * 1000)}"
-        created_at = time.time()
-        c.execute(
-            "INSERT INTO chats (id, student_id, title, created_at, role) VALUES (?,?,?,?,?)",
-            (chat_id, student_id, CHAT_TITLE, created_at, 1)  # role=1 → teacher chat
-        )
-
-    job = get_job(job_id)
-    msg = job.get("message", "Xử lý hoàn tất.")
-    c.execute(
-        "INSERT INTO messages (chat_id, role, text, timestamp) VALUES (?,?,?,?)",
-        (chat_id, "assistant", msg, time.time())
-    )
-    conn.commit()
-    conn.close()

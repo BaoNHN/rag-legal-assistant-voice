@@ -71,8 +71,12 @@ body {
 .chat-title {
     font-size: 14px;
     color: white;
-    flex: 1;            /* makes clickable area large */
+    flex: 1;
     padding-right: 10px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 170px;
 }
 
 .chat-options {
@@ -138,14 +142,87 @@ body {
     min-height: 0;
 }
 
+/* ── Welcome screen ─────────────────────────────── */
+#welcome-screen {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding-bottom: 40px;
+}
+
+.welcome-title {
+    font-size: 28px;
+    font-weight: 600;
+    color: #212121;
+    margin: 0 0 8px 0;
+    text-align: center;
+}
+
+.welcome-subtitle {
+    font-size: 15px;
+    color: #757575;
+    margin: 0 0 28px 0;
+    text-align: center;
+}
+
+.suggestion-chips {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+.chip {
+    padding: 9px 16px;
+    border: 1.5px solid #E0E0E0;
+    border-radius: 20px;
+    background: white;
+    color: #424242;
+    font-size: 13px;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+}
+
+.chip:hover {
+    border-color: #6200EA;
+    background: #F3E5F5;
+    color: #6200EA;
+}
+
+/* Hidden when chatting */
+.container.is-chatting #welcome-screen {
+    display: none;
+}
+
+/* ── Chatbox ────────────────────────────────────── */
 .chatbox {
     flex: 1;
     padding: 16px;
-    overflow-y: auto;  /* THIS is where scrolling happens */
+    overflow-y: auto;
     display: flex;
     flex-direction: column;
     gap: 8px;
     min-height: 0;
+}
+
+/* Hidden until chatting */
+#chatbox {
+    display: none;
+}
+
+.container.is-chatting #chatbox {
+    display: flex;
+}
+
+/* ── Disclaimer ─────────────────────────────────── */
+#disclaimer {
+    text-align: center;
+    font-size: 12px;
+    color: #9E9E9E;
+    padding: 6px 16px 8px;
+    background: white;
 }
 
 /* Message bubbles */
@@ -171,9 +248,36 @@ body {
     border-top-right-radius: 0;
 }
 
+/* ── Speaker (read-aloud) button ─────────────────── */
+.msg-speak-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    margin-top: 6px;
+    border: none;
+    border-radius: 50%;
+    background: rgba(0,0,0,0.08);
+    color: #555;
+    cursor: pointer;
+    transition: background .15s, color .15s;
+}
+.msg-speak-btn:hover { background: rgba(98,0,234,0.15); color: #6200EA; }
+.msg-speak-btn.loading { animation: spin 1s linear infinite; }
+.msg-speak-btn.playing { background: #6200EA; color: white; }
+
 /* ---------------------------------------------------
    INPUT AREA
 --------------------------------------------------- */
+.input-area-wrap {
+    border-top: 1px solid #E0E0E0;
+    background-color: #F5F5F5;
+}
+.input-area-wrap .input-area {
+    border-top: none;
+}
+
 .input-area {
     padding: 10px;
     border-top: 1px solid #E0E0E0;
@@ -242,34 +346,98 @@ body {
     white-space: pre-wrap;
 }
 
-/* ── Voice patch ── */
-#micBtn.recording {
-  background: #ef4444 !important;
-  animation: micPulse 1.2s ease-in-out infinite;
+/* ── Structured answer sections (Lỗi 7) ─────────── */
+.msg-body {
+    margin-bottom: 6px;
 }
 
-@keyframes micPulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.5); }
-  50%       { box-shadow: 0 0 0 8px rgba(239, 68, 68, 0);  }
+.msg-section {
+    padding: 8px 12px;
+    border-radius: 6px;
+    margin-bottom: 6px;
+    font-size: 13.5px;
+    line-height: 1.55;
 }
 
-@keyframes blink {
-  0%, 100% { opacity: 1; }
-  50%       { opacity: 0; }
+.section-label {
+    display: block;
+    font-weight: 700;
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    margin-bottom: 4px;
 }
 
-#voicePlayer {
-  width: 100%;
-  margin-top: 8px;
-  border-radius: 8px;
-  background: rgba(255,255,255,0.05);
-  accent-color: #6366f1;
+/* Kết luận — nền hồng nhạt, chữ label đỏ */
+.msg-conclusion {
+    background: #fff5f5;
+    border-left: 3px solid #e53935;
+    color: #212121;
+}
+.msg-conclusion .section-label { color: #e53935; }
+
+/* Phân tích — nền xanh nhạt, chữ label xanh */
+.msg-analysis {
+    background: #e8f4fd;
+    border-left: 3px solid #1565C0;
+    color: #212121;
+}
+.msg-analysis .section-label { color: #1565C0; }
+
+/* Lưu ý — nền vàng nhạt, chữ label vàng đậm */
+.msg-note {
+    background: #fffde7;
+    border-left: 3px solid #f9a825;
+    color: #33280d;
+    font-size: 12.5px;
+}
+.msg-note .section-label { color: #e65100; }
+
+/* ── Citation blocks ────────────────────────────── */
+.msg-citation {
+    font-size: 12px;
+    background: #e3f2fd;
+    border-left: 3px solid #1976D2;
+    padding: 6px 10px;
+    border-radius: 4px;
+    color: #1565C0;
+    margin-top: 8px;
+    white-space: pre-wrap;
 }
 
-#voiceBar select {
-  max-width: 150px;
+.msg-citation-secondary {
+    font-size: 11px;
+    background: #f3e5f5;
+    border-left: 3px solid #9c27b0;
+    padding: 5px 10px;
+    border-radius: 4px;
+    color: #6a1b9a;
+    margin-top: 4px;
+    white-space: pre-wrap;
+    max-height: 80px;
+    overflow-y: auto;
 }
 
-#voiceBar input[type="checkbox"] {
-  accent-color: #6366f1;
+/* ── Sidebar tooltip (Lỗi 8) ─────────────────────── */
+.chat-item {
+    position: relative;
+}
+
+.chat-title[title]:hover::after {
+    content: attr(title);
+    position: absolute;
+    left: 0;
+    top: 100%;
+    margin-top: 4px;
+    background: #111;
+    color: #fff;
+    font-size: 12px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    white-space: nowrap;
+    z-index: 300;
+    max-width: 220px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    pointer-events: none;
 }

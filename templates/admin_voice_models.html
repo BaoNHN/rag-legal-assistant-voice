@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Quản lý mô hình giọng nói – RAG Legal Assistant</title>
+<link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,600;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+<style>
+:root {
+  --navy:   #0B1F3A;
+  --navy2:  #132843;
+  --teal:   #0A8C7E;
+  --teal2:  #0DB4A2;
+  --gold:   #E8A020;
+  --white:  #F7F9FC;
+  --gray:   #8A97A8;
+  --border: #D0D9E6;
+  --red:    #D63B3B;
+  --green:  #1D9B6C;
+  --radius: 10px;
+  --shadow: 0 4px 24px rgba(11,31,58,0.13);
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'DM Sans', sans-serif;
+  background: var(--navy);
+  color: var(--white);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+nav {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 28px;
+  background: var(--navy2);
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+}
+nav .logo {
+  font-family: 'Crimson Pro', serif;
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--teal2);
+  letter-spacing: .5px;
+  flex: 1;
+}
+.btn-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 18px;
+  border-radius: var(--radius);
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+  text-decoration: none;
+  border: none;
+  transition: all .18s;
+}
+.btn-back { background: rgba(255,255,255,0.07); color: var(--white); }
+.btn-back:hover { background: rgba(255,255,255,0.13); }
+
+main {
+  flex: 1;
+  padding: 36px 24px;
+  max-width: 1100px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+h1 {
+  font-family: 'Crimson Pro', serif;
+  font-size: 24px;
+  font-weight: 600;
+  margin-bottom: 22px;
+}
+
+.card {
+  background: var(--navy2);
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,0.07);
+  box-shadow: var(--shadow);
+  padding: 20px 22px;
+  margin-bottom: 22px;
+}
+.card h2 {
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 14px;
+}
+
+.endpoint-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.endpoint-row input {
+  flex: 1;
+  padding: 9px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,0.05);
+  color: var(--white);
+  font-size: 13.5px;
+  font-family: monospace;
+}
+.endpoint-row button {
+  padding: 9px 18px;
+  border-radius: 8px;
+  border: none;
+  background: var(--teal2);
+  color: var(--navy);
+  font-weight: 600;
+  cursor: pointer;
+}
+.health-dot {
+  display: inline-block;
+  width: 9px; height: 9px;
+  border-radius: 50%;
+  margin-right: 6px;
+}
+.health-dot.up { background: #4DFFB4; }
+.health-dot.down { background: #FF8080; }
+.health-line { font-size: 12.5px; color: var(--gray); margin-top: 10px; }
+
+.table-card {
+  background: var(--navy2);
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,0.07);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+table { width: 100%; border-collapse: collapse; }
+thead th {
+  text-align: left;
+  font-size: 11.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  color: var(--gray);
+  padding: 14px 16px;
+  background: rgba(255,255,255,0.03);
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+}
+tbody td {
+  padding: 12px 16px;
+  font-size: 13px;
+  color: var(--white);
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  vertical-align: middle;
+}
+tbody tr:last-child td { border-bottom: none; }
+tbody tr:hover { background: rgba(255,255,255,0.02); }
+
+.status-pill {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.status-pill.ready      { background: rgba(29,155,108,0.15); color: #4DFFB4; }
+.status-pill.new,
+.status-pill.collecting { background: rgba(232,160,32,0.15); color: var(--gold); }
+.status-pill.training   { background: rgba(30,136,229,0.15); color: #64B5F6; }
+.status-pill.failed     { background: rgba(214,59,59,0.15); color: #FF8080; }
+
+.manage-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.btn-action {
+  padding: 6px 11px;
+  border-radius: 7px;
+  font-size: 11.5px;
+  font-weight: 600;
+  font-family: 'DM Sans', sans-serif;
+  cursor: pointer;
+  border: 1.5px solid transparent;
+  background: rgba(255,255,255,0.07);
+  color: var(--white);
+}
+.btn-action:hover { background: rgba(255,255,255,0.14); }
+.btn-action.danger { color: #FF8080; }
+.btn-action:disabled { opacity: .4; cursor: not-allowed; }
+
+.empty-state { padding: 32px; text-align: center; color: var(--gray); font-size: 13.5px; }
+.mono { font-family: monospace; font-size: 11.5px; color: var(--gray); }
+</style>
+</head>
+<body>
+
+<nav>
+  <span class="logo">⚖️ RAG Legal Assistant</span>
+  <a href="/" class="btn-nav btn-back">← Quay về Chat</a>
+</nav>
+
+<main>
+  <h1>🛠 Quản lý mô hình giọng nói</h1>
+
+  <div class="card">
+    <h2>Kết nối máy chủ RVC (Colab)</h2>
+    <div class="endpoint-row">
+      <input type="text" id="endpointInput" placeholder="https://xxxx.trycloudflare.com"/>
+      <button id="saveEndpointBtn">Lưu</button>
+    </div>
+    <div class="health-line" id="healthLine">Đang kiểm tra…</div>
+  </div>
+
+  <div class="table-card">
+    <table>
+      <thead>
+        <tr>
+          <th>Chủ sở hữu</th>
+          <th>Tên giọng nói</th>
+          <th>Trạng thái</th>
+          <th>Số mẫu</th>
+          <th>Speaker ID</th>
+          <th>Sao lưu cục bộ</th>
+          <th>Hành động</th>
+        </tr>
+      </thead>
+      <tbody id="modelsTbody">
+        <tr><td colspan="7" class="empty-state">Đang tải…</td></tr>
+      </tbody>
+    </table>
+  </div>
+</main>
+
+<script>
+const STATUS_LABEL = { new: 'Chưa ghi âm', collecting: 'Đang thu mẫu', training: 'Đang huấn luyện', ready: 'Sẵn sàng', failed: 'Lỗi' };
+
+function escapeHtml(s) {
+  const div = document.createElement('div');
+  div.textContent = s == null ? '' : String(s);
+  return div.innerHTML;
+}
+
+async function loadEndpoint() {
+  const data = await fetch('/admin/rvc_endpoint').then(r => r.json());
+  document.getElementById('endpointInput').value = data.endpoint || '';
+  renderHealth(data.available);
+}
+
+function renderHealth(available) {
+  const el = document.getElementById('healthLine');
+  el.innerHTML = available
+    ? '<span class="health-dot up"></span>Colab RVC server đang hoạt động.'
+    : '<span class="health-dot down"></span>Không kết nối được tới Colab RVC server (giọng nói sẽ dùng TTS mặc định).';
+}
+
+document.getElementById('saveEndpointBtn').addEventListener('click', async () => {
+  const endpoint = document.getElementById('endpointInput').value.trim();
+  const res  = await fetch('/admin/rvc_endpoint', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ endpoint })
+  });
+  const data = await res.json();
+  renderHealth(data.available);
+});
+
+async function loadModels() {
+  const tbody = document.getElementById('modelsTbody');
+  try {
+    const res = await fetch('/list_voice_models');
+    if (res.status === 403) { window.location.href = '/'; return; }
+    const models = await res.json();
+
+    if (!Array.isArray(models) || models.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7" class="empty-state">Chưa có giọng nói cá nhân nào được tạo.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = models.map(m => {
+      const canRetrain = m.sample_count >= {{ min_samples | default(5) }} && m.status !== 'training';
+      return `
+        <tr>
+          <td>${escapeHtml(m.owner_name)}</td>
+          <td>${escapeHtml(m.name)}</td>
+          <td><span class="status-pill ${m.status}">${STATUS_LABEL[m.status] || m.status}</span></td>
+          <td>${m.sample_count}</td>
+          <td class="mono">${escapeHtml(m.speaker_id || '—')}</td>
+          <td>${m.model_local_path
+              ? '<span class="status-pill ready">✓ Đã sao lưu</span>'
+              : '<span class="status-pill new">Chưa có</span>'}</td>
+          <td class="manage-actions">
+            <button class="btn-action" ${canRetrain ? '' : 'disabled'} onclick="retrain(${m.id})">Huấn luyện lại</button>
+            <button class="btn-action" onclick="disableModel(${m.id})">Vô hiệu hoá</button>
+            <button class="btn-action danger" onclick="removeModel(${m.id}, '${escapeHtml(m.name)}')">Xoá</button>
+          </td>
+        </tr>`;
+    }).join('');
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="7" class="empty-state">❌ Lỗi tải danh sách: ${escapeHtml(e.message)}</td></tr>`;
+  }
+}
+
+async function retrain(id) {
+  const res  = await fetch(`/admin/voice_models/${id}/retrain`, { method: 'POST' });
+  const data = await res.json();
+  if (data.status !== 'ok') alert('❌ ' + (data.message || 'Lỗi'));
+  loadModels();
+}
+
+async function disableModel(id) {
+  if (!confirm('Vô hiệu hoá giọng nói này? Người dùng sẽ không thể dùng nó để đọc câu trả lời.')) return;
+  await fetch(`/admin/voice_models/${id}/disable`, { method: 'POST' });
+  loadModels();
+}
+
+async function removeModel(id, name) {
+  if (!confirm(`Xoá vĩnh viễn giọng nói "${name}" và toàn bộ mẫu ghi âm?`)) return;
+  const res  = await fetch(`/admin/voice_models/${id}`, { method: 'DELETE' });
+  const data = await res.json();
+  if (data.message) alert('⚠️ ' + data.message);
+  loadModels();
+}
+
+(async function init() {
+  await loadEndpoint();
+  await loadModels();
+})();
+</script>
+</body>
+</html>

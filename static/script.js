@@ -3,14 +3,33 @@ const chatInput = document.getElementById("chatInput");
 const chatbox = document.getElementById("chatbox");
 const chatList = document.getElementById("chat-list");
 const newChatBtn = document.querySelector(".new-chat");
+const mainContainer = document.getElementById("mainContainer");
 
 let currentChatId = null;
 let chats = {};  // { chatId: [{role:'user', text:'hi'}, ...] }
+
+// ── Welcome / Chat mode toggle ────────────────────
+function enterChatMode() {
+    mainContainer.classList.add("is-chatting");
+}
+
+function enterWelcomeMode() {
+    mainContainer.classList.remove("is-chatting");
+}
+
+// ── Suggestion chips ──────────────────────────────
+document.querySelectorAll(".chip").forEach(chip => {
+    chip.addEventListener("click", () => {
+        chatInput.value = chip.dataset.prompt;
+        chatInput.focus();
+    });
+});
 
 // load Chat From DataBase
 async function loadChatFromDB(chatId) {
     currentChatId = chatId;
     clearChatbox();
+    enterChatMode();
 
     const messages = await fetch(`/get_chat_messages?chat_id=${chatId}`)
         .then(r => r.json());
@@ -22,20 +41,139 @@ async function loadChatFromDB(chatId) {
     });
 }
 
+// Everything before "📖 Nguồn chính" (citations/links) — this is what gets
+// read aloud by the speaker button, so sources are never spoken.
+function extractSpokenText(text) {
+    return text.split(/\n*📖 Nguồn chính:/)[0].trim().replace(/\*\*/g, '');
+}
+
+// Format assistant message: parse structured sections + citation block
+function formatAssistantHTML(text) {
+    const parts = text.split(/\n*📖 Nguồn chính:/);
+    // Strip ** bold markers so they never appear in UI
+    const bodyText = parts[0].trim().replace(/\*\*/g, '');
+
+    // indexOf-based section extractor — more reliable than regex for Vietnamese
+    function getSection(label) {
+        const marker = label + ':';
+        const start = bodyText.indexOf(marker);
+        if (start === -1) return null;
+        const from = start + marker.length;
+        const siblings = ['Kết luận:', 'Phân tích:', 'Lưu ý:'];
+        let end = bodyText.length;
+        for (const m of siblings) {
+            if (m === marker) continue;
+            const i = bodyText.indexOf(m, from);
+            if (i !== -1 && i < end) end = i;
+        }
+        return bodyText.substring(from, end).trim() || null;
+    }
+
+    const conclusion = getSection('Kết luận');
+    const analysis   = getSection('Phân tích');
+    const note       = getSection('Lưu ý');
+
+    let html = '';
+    if (conclusion || analysis) {
+        if (conclusion)
+            html += `<div class="msg-section msg-conclusion"><span class="section-label">Kết luận</span>${conclusion.replace(/\n/g, '<br>')}</div>`;
+        if (analysis)
+            html += `<div class="msg-section msg-analysis"><span class="section-label">Phân tích</span>${analysis.replace(/\n/g, '<br>')}</div>`;
+        if (note)
+            html += `<div class="msg-section msg-note"><span class="section-label">Lưu ý</span>${note.replace(/\n/g, '<br>')}</div>`;
+    } else {
+        html = `<div class="msg-body">${bodyText.replace(/\n/g, '<br>')}</div>`;
+    }
+
+    // Citation blocks
+    if (parts.length > 1) {
+        const citationRaw = parts[1].trim();
+        const citParts = citationRaw.split(/\n📎 Nguồn tham khảo:/);
+        const primary = citParts[0].trim().replace(/\n/g, '<br>');
+        html += `<div class="msg-citation">📖 Nguồn chính: ${primary}</div>`;
+        if (citParts.length > 1) {
+            const secondary = citParts[1].trim().replace(/\n/g, '<br>');
+            html += `<div class="msg-citation-secondary">📎 Nguồn tham khảo:<br>${secondary}</div>`;
+        }
+    }
+    return html;
+}
+
 // Display chat bubbles
 async function displayMessage(message, isUser) {
-                const msgElem = document.createElement('div');
-            msgElem.innerHTML = message.replace(/\n/g, "<br>");
-            msgElem.className = `chat-message ${isUser ? 'user-message' : 'assistant-message'}`;
-            chatbox.appendChild(msgElem);
-            chatbox.scrollTop = chatbox.scrollHeight; // Scroll to the bottom
+    const msgElem = document.createElement('div');
+    if (isUser) {
+        msgElem.innerHTML = message.replace(/\n/g, "<br>");
+    } else {
+        msgElem.innerHTML = formatAssistantHTML(message);
+    }
+    msgElem.className = `chat-message ${isUser ? 'user-message' : 'assistant-message'}`;
+    chatbox.appendChild(msgElem);
 
-            // For assistant messages, add a slight delay before displaying
-            if (!isUser) {
-                msgElem.style.opacity = 0; // Start with opacity 0
-                await new Promise(resolve => setTimeout(resolve, 300)); // Delay
-                msgElem.style.opacity = 1; // Fade in
-            }
+    // Speaker (read-aloud) button — assistant messages only, skip the "thinking…" placeholder
+    if (!isUser && message !== "⏳ Đang suy nghĩ...") {
+        appendSpeakButton(msgElem, extractSpokenText(message));
+    }
+
+    chatbox.scrollTop = chatbox.scrollHeight;
+
+    if (!isUser) {
+        msgElem.style.opacity = 0;
+        await new Promise(resolve => setTimeout(resolve, 300));
+        msgElem.style.opacity = 1;
+    }
+}
+
+// ── Read-aloud (speaker) button ───────────────────────────────────────────
+let _activeSpeakAudio = null;
+
+function appendSpeakButton(container, spokenText) {
+    const btn = document.createElement('button');
+    btn.className = 'msg-speak-btn';
+    btn.title = 'Đọc to nội dung này';
+    btn.innerHTML = '<span class="material-icons" style="font-size:16px;">volume_up</span>';
+    btn.addEventListener('click', () => speakMessage(spokenText, btn));
+    container.appendChild(btn);
+}
+
+async function speakMessage(text, btn) {
+    // Stop any currently playing speech (including this same button = toggle-off)
+    const wasPlayingThis = btn.classList.contains('playing');
+    if (_activeSpeakAudio) {
+        _activeSpeakAudio.pause();
+        _activeSpeakAudio = null;
+    }
+    document.querySelectorAll('.msg-speak-btn.playing, .msg-speak-btn.loading')
+        .forEach(b => b.classList.remove('playing', 'loading'));
+    if (wasPlayingThis) return;
+
+    btn.classList.add('loading');
+    try {
+        const profileId = window.__selectedVoiceProfileId || null;
+        const resp = await fetch('/voice/speak', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: text, profile_id: profileId })
+        });
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+
+        const blob  = await resp.blob();
+        const url   = URL.createObjectURL(blob);
+        const audio = new Audio(url);
+        _activeSpeakAudio = audio;
+
+        btn.classList.remove('loading');
+        btn.classList.add('playing');
+        await audio.play();
+
+        audio.onended = () => {
+            btn.classList.remove('playing');
+            if (_activeSpeakAudio === audio) _activeSpeakAudio = null;
+        };
+    } catch (e) {
+        btn.classList.remove('loading', 'playing');
+        console.error('[Voice] Đọc to thất bại:', e);
+    }
 }
 
 async function callApi(prompt) {
@@ -122,7 +260,10 @@ sendButton.addEventListener('click', async () => {
             }
         }
 
-        // 5️⃣ Display user message
+        // 5️⃣ Switch to chat mode on first message
+        enterChatMode();
+
+        // Display user message
         displayMessage(message, true);
         chatInput.value = "";
 
@@ -140,7 +281,6 @@ sendButton.addEventListener('click', async () => {
         // 9️⃣ Handle response
         if (data && data.status === "success") {
             displayMessage(data.text, false);
-            speakAnswer(data.text);
         } else {
             displayMessage(data?.text || "❌ Lỗi không xác định", false);
         }
@@ -163,13 +303,14 @@ async function createNewChat() {
 
     const data = await res.json();
 
-    currentChatId = data.chat_id;   // ✅ lấy từ server
+    currentChatId = data.chat_id;
 
     chats[currentChatId] = [];
 
     createChatItem(currentChatId, "New Chat");
 
     clearChatbox();
+    enterWelcomeMode();
 }
 
 function clearChatbox() {
@@ -194,7 +335,9 @@ function renameChat(chatId, newName) {
     const items = document.querySelectorAll(".chat-item");
     items.forEach(i => {
         if (i.dataset.id === chatId) {
-            i.querySelector(".chat-title").innerText = newName;
+            const titleElem = i.querySelector(".chat-title");
+            titleElem.innerText = newName;
+            titleElem.title = newName;
         }
     });
 }
@@ -205,7 +348,7 @@ function createChatItem(chatId, title) {
     item.dataset.id = chatId;
 
     item.innerHTML = `
-        <span class="chat-title">${title}</span>
+        <span class="chat-title" title="${title}">${title}</span>
         <span class="chat-options">⋯</span>
     `;
 

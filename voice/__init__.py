@@ -1,1 +1,1 @@
-# voice package — STT + TTS + RVC modules for rag-legal-assistant-master
+# voice package - TTS + RVC-client modules for the personalized chat voice feature

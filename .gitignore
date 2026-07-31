@@ -1,8 +1,12 @@
 /chroma_db/
+/chroma_db_backup_*/
+/chat.db.bak
 /rag_env/
 /chat.db
+/uploads_tmp/
 groqkey.txt
 groqkeyss.txt
+voice_station_key.txt
 .device_config
 .idea/
 terminal.txt

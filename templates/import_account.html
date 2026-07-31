@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Import tài khoản – RAG Legal Assistant</title>
+<link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,600;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+<style>
+:root {
+  --navy:   #0B1F3A;
+  --navy2:  #132843;
+  --teal:   #0A8C7E;
+  --teal2:  #0DB4A2;
+  --gold:   #E8A020;
+  --white:  #F7F9FC;
+  --gray:   #8A97A8;
+  --border: #D0D9E6;
+  --red:    #D63B3B;
+  --green:  #1D9B6C;
+  --radius: 10px;
+  --shadow: 0 4px 24px rgba(11,31,58,0.13);
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'DM Sans', sans-serif;
+  background: var(--navy);
+  color: var(--white);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+nav {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 28px;
+  background: var(--navy2);
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+}
+nav .logo {
+  font-family: 'Crimson Pro', serif;
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--teal2);
+  letter-spacing: .5px;
+  flex: 1;
+}
+.btn-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 18px;
+  border-radius: var(--radius);
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+  text-decoration: none;
+  border: none;
+  transition: all .18s;
+}
+.btn-back { background: rgba(255,255,255,0.07); color: var(--white); }
+.btn-back:hover { background: rgba(255,255,255,0.13); }
+
+main {
+  flex: 1;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 36px 24px;
+  max-width: 600px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.upload-card {
+  flex: 1;
+  background: var(--navy2);
+  border-radius: 16px;
+  padding: 28px 28px 24px;
+  border: 1px solid rgba(255,255,255,0.07);
+  box-shadow: var(--shadow);
+}
+
+.panel-title {
+  font-family: 'Crimson Pro', serif;
+  font-size: 22px;
+  font-weight: 600;
+  margin-bottom: 4px;
+  color: var(--white);
+}
+.panel-subtitle {
+  font-size: 13px;
+  color: var(--gray);
+  margin-bottom: 10px;
+}
+.panel-subtitle span { color: var(--teal2); }
+
+.template-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--teal2);
+  text-decoration: none;
+  margin-bottom: 22px;
+  border-bottom: 1px dashed rgba(13,180,162,0.4);
+  padding-bottom: 1px;
+  transition: opacity .18s;
+}
+.template-link:hover { opacity: .8; }
+
+.drop-zone {
+  border: 2px dashed var(--border);
+  border-radius: var(--radius);
+  padding: 32px 20px;
+  text-align: center;
+  cursor: pointer;
+  transition: all .2s;
+  position: relative;
+  background: rgba(255,255,255,0.02);
+}
+.drop-zone:hover, .drop-zone.dragover {
+  border-color: var(--teal2);
+  background: rgba(10,140,126,0.07);
+}
+.drop-zone input[type=file] {
+  position: absolute; inset: 0;
+  opacity: 0; cursor: pointer; width: 100%; height: 100%;
+}
+.drop-zone .dz-icon {
+  width: 44px; height: 44px;
+  background: var(--teal);
+  border-radius: 11px;
+  display: flex; align-items: center; justify-content: center;
+  margin: 0 auto 12px;
+  font-size: 20px;
+}
+.drop-zone h2 { font-size: 14.5px; font-weight: 600; color: var(--white); margin-bottom: 5px; }
+.drop-zone p  { font-size: 12px; color: var(--gray); }
+.drop-zone .btn-select {
+  display: inline-block;
+  margin-top: 12px;
+  padding: 9px 22px;
+  background: var(--gold);
+  color: var(--navy);
+  border-radius: 8px;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity .18s;
+}
+.drop-zone .btn-select:hover { opacity: .88; }
+
+.file-chosen {
+  display: none;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+  padding: 11px 13px;
+  background: rgba(29,155,108,0.12);
+  border-radius: 8px;
+  border: 1px solid rgba(29,155,108,0.3);
+}
+.file-chosen .file-icon { font-size: 20px; }
+.file-chosen .file-info { flex: 1; min-width: 0; }
+.file-chosen .file-name { font-size: 13px; font-weight: 500; color: var(--white); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.file-chosen .file-size { font-size: 11px; color: var(--gray); }
+.file-chosen .remove-btn { background: none; border: none; color: var(--gray); cursor: pointer; font-size: 15px; padding: 4px; transition: color .15s; }
+.file-chosen .remove-btn:hover { color: var(--red); }
+
+.global-error { display: none; background: rgba(214,59,59,0.12); border: 1px solid rgba(214,59,59,0.35); color: #FF8080; border-radius: 8px; padding: 10px 13px; font-size: 13px; margin-top: 14px; }
+
+.btn-submit {
+  width: 100%;
+  padding: 13px;
+  background: var(--teal);
+  color: var(--white);
+  border: none;
+  border-radius: var(--radius);
+  font-size: 14.5px;
+  font-weight: 600;
+  font-family: 'DM Sans', sans-serif;
+  cursor: pointer;
+  transition: all .2s;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  margin-top: 18px;
+}
+.btn-submit:hover { background: var(--teal2); }
+.btn-submit:disabled { opacity: .5; cursor: not-allowed; }
+.btn-submit .spinner { width: 15px; height: 15px; border: 2px solid rgba(255,255,255,0.3); border-top-color: white; border-radius: 50%; animation: spin .7s linear infinite; display: none; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.success-banner { display: none; background: rgba(29,155,108,0.12); border: 1px solid rgba(29,155,108,0.35); border-radius: 10px; padding: 14px; text-align: center; margin-top: 14px; }
+.success-banner .s-icon { font-size: 26px; margin-bottom: 5px; }
+.success-banner h3 { font-size: 14px; font-weight: 600; color: #4DFFB4; margin-bottom: 4px; }
+.success-banner p { font-size: 12px; color: var(--gray); line-height: 1.6; white-space: pre-line; }
+</style>
+</head>
+<body>
+
+<nav>
+  <span class="logo">⚖️ RAG Legal Assistant</span>
+  <a href="/manage_accounts" class="btn-nav btn-back">← Quay lại Quản lý tài khoản</a>
+</nav>
+
+<main>
+  <div class="upload-card">
+    <h1 class="panel-title">Import tài khoản</h1>
+    <p class="panel-subtitle">Tải lên file <span>.xlsx</span> để tạo hàng loạt tài khoản</p>
+
+    <a href="/download_account_template" class="template-link">⬇️ Tải file Excel mẫu</a>
+
+    <div class="drop-zone" id="accDropZone">
+      <input type="file" id="accInput" accept=".xlsx"/>
+      <div class="dz-icon">📊</div>
+      <h2>Chọn hoặc kéo thả file .xlsx</h2>
+      <p>Cột bắt buộc: Account Name, Role (Student / Teacher)</p>
+      <div class="btn-select">Chọn file .xlsx</div>
+    </div>
+
+    <div class="file-chosen" id="accFileChosen">
+      <span class="file-icon">📋</span>
+      <div class="file-info">
+        <div class="file-name" id="accFileName">–</div>
+        <div class="file-size" id="accFileSize">–</div>
+      </div>
+      <button class="remove-btn" id="accRemoveFile" title="Xoá file">✕</button>
+    </div>
+
+    <div class="global-error" id="accGlobalError"></div>
+
+    <button class="btn-submit" id="accSubmitBtn" onclick="handleAccSubmit()">
+      <div class="spinner" id="accSpinner"></div>
+      <span id="accBtnText">📥 Import tài khoản</span>
+    </button>
+
+    <div class="success-banner" id="accSuccessBanner">
+      <div class="s-icon">✅</div>
+      <h3>Import hoàn tất!</h3>
+      <p id="accSuccessMsg"></p>
+      <button class="btn-submit" id="accErrorBtn" style="display:none; background: var(--red); margin-top: 12px;" onclick="downloadAccErrors()">
+        ⚠️ Tải tài khoản lỗi
+      </button>
+    </div>
+  </div>
+</main>
+
+<script>
+let accSelectedFile = null;
+let accErrorReportB64 = null;
+
+const accDropZone   = document.getElementById('accDropZone');
+const accInput      = document.getElementById('accInput');
+const accFileChosen = document.getElementById('accFileChosen');
+
+accInput.addEventListener('change', e => { if (e.target.files[0]) setAccFile(e.target.files[0]); });
+document.getElementById('accRemoveFile').addEventListener('click', () => {
+  accSelectedFile = null;
+  accInput.value  = '';
+  accFileChosen.style.display = 'none';
+  accDropZone.style.display   = 'block';
+});
+
+accDropZone.addEventListener('dragover', e => { e.preventDefault(); accDropZone.classList.add('dragover'); });
+accDropZone.addEventListener('dragleave', () => accDropZone.classList.remove('dragover'));
+accDropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  accDropZone.classList.remove('dragover');
+  const f = e.dataTransfer.files[0];
+  if (f && f.name.endsWith('.xlsx')) setAccFile(f);
+  else alert('Vui lòng chỉ tải lên file .xlsx!');
+});
+
+function setAccFile(f) {
+  accSelectedFile = f;
+  document.getElementById('accFileName').textContent = f.name;
+  document.getElementById('accFileSize').textContent = (f.size / 1024 / 1024).toFixed(2) + ' MB';
+  accFileChosen.style.display = 'flex';
+  accDropZone.style.display   = 'none';
+  document.getElementById('accGlobalError').style.display = 'none';
+}
+
+async function handleAccSubmit() {
+  const errEl = document.getElementById('accGlobalError');
+  errEl.style.display = 'none';
+
+  if (!accSelectedFile) {
+    errEl.textContent = '⚠️ Vui lòng chọn file .xlsx';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  const btn = document.getElementById('accSubmitBtn');
+  btn.disabled = true;
+  document.getElementById('accSpinner').style.display = 'block';
+  document.getElementById('accBtnText').textContent   = 'Đang xử lý…';
+
+  const fd = new FormData();
+  fd.append('account_file', accSelectedFile);
+
+  try {
+    const res  = await fetch('/import_account', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (data.status === 'ok') {
+      document.getElementById('accSuccessBanner').style.display = 'block';
+      document.getElementById('accSuccessMsg').textContent = data.message;
+      btn.style.display = 'none';
+
+      if (data.has_errors && data.error_report_b64) {
+        accErrorReportB64 = data.error_report_b64;
+        document.getElementById('accErrorBtn').style.display = 'inline-flex';
+      }
+    } else {
+      throw new Error(data.message || 'Server error');
+    }
+  } catch (err) {
+    errEl.textContent = '❌ Lỗi: ' + err.message; errEl.style.display = 'block';
+    btn.disabled = false;
+    document.getElementById('accSpinner').style.display = 'none';
+    document.getElementById('accBtnText').textContent   = '📥 Import tài khoản';
+  }
+}
+
+function downloadAccErrors() {
+  if (!accErrorReportB64) return;
+  const bytes = Uint8Array.from(atob(accErrorReportB64), c => c.charCodeAt(0));
+  const blob  = new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const url   = URL.createObjectURL(blob);
+  const a     = document.createElement('a');
+  a.href = url;
+  a.download = 'tai_khoan_loi.xlsx';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+</script>
+</body>
+</html>

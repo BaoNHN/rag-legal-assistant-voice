@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Quản lý tài khoản – RAG Legal Assistant</title>
+<link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,600;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+<style>
+:root {
+  --navy:   #0B1F3A;
+  --navy2:  #132843;
+  --teal:   #0A8C7E;
+  --teal2:  #0DB4A2;
+  --gold:   #E8A020;
+  --white:  #F7F9FC;
+  --gray:   #8A97A8;
+  --border: #D0D9E6;
+  --red:    #D63B3B;
+  --green:  #1D9B6C;
+  --radius: 10px;
+  --shadow: 0 4px 24px rgba(11,31,58,0.13);
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'DM Sans', sans-serif;
+  background: var(--navy);
+  color: var(--white);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+nav {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 28px;
+  background: var(--navy2);
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+}
+nav .logo {
+  font-family: 'Crimson Pro', serif;
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--teal2);
+  letter-spacing: .5px;
+  flex: 1;
+}
+.btn-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 18px;
+  border-radius: var(--radius);
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+  text-decoration: none;
+  border: none;
+  transition: all .18s;
+}
+.btn-back { background: rgba(255,255,255,0.07); color: var(--white); }
+.btn-back:hover { background: rgba(255,255,255,0.13); }
+
+main {
+  flex: 1;
+  padding: 36px 24px;
+  max-width: 900px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 22px;
+}
+.top-bar h1 {
+  font-family: 'Crimson Pro', serif;
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--white);
+}
+.btn-import-account {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  background: var(--gold);
+  color: var(--navy);
+  border-radius: var(--radius);
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+  border: none;
+  transition: opacity .18s;
+}
+.btn-import-account:hover { opacity: .88; }
+
+.table-card {
+  background: var(--navy2);
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,0.07);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+table { width: 100%; border-collapse: collapse; }
+thead th {
+  text-align: left;
+  font-size: 11.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  color: var(--gray);
+  padding: 14px 18px;
+  background: rgba(255,255,255,0.03);
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+}
+tbody td {
+  padding: 13px 18px;
+  font-size: 13.5px;
+  color: var(--white);
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+tbody tr:last-child td { border-bottom: none; }
+tbody tr:hover { background: rgba(255,255,255,0.02); }
+
+.role-pill {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+.role-pill.student { background: rgba(13,180,162,0.15); color: var(--teal2); }
+.role-pill.teacher  { background: rgba(232,160,32,0.15); color: var(--gold); }
+.role-pill.admin    { background: rgba(214,59,59,0.15); color: #FF8080; }
+
+.status-pill {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+.status-pill.active   { background: rgba(29,155,108,0.15); color: #4DFFB4; }
+.status-pill.disabled { background: rgba(214,59,59,0.15); color: #FF8080; }
+
+.manage-actions { display: flex; gap: 8px; }
+.btn-action {
+  padding: 7px 13px;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: 'DM Sans', sans-serif;
+  cursor: pointer;
+  border: 1.5px solid transparent;
+  transition: all .18s;
+}
+.btn-activate   { background: rgba(29,155,108,0.12); color: #4DFFB4; border-color: rgba(29,155,108,0.3); }
+.btn-activate:hover   { background: rgba(29,155,108,0.22); }
+.btn-deactivate { background: rgba(232,160,32,0.12); color: var(--gold); border-color: rgba(232,160,32,0.3); }
+.btn-deactivate:hover { background: rgba(232,160,32,0.22); }
+.btn-delete     { background: rgba(214,59,59,0.12); color: #FF8080; border-color: rgba(214,59,59,0.3); }
+.btn-delete:hover     { background: rgba(214,59,59,0.22); }
+.btn-action:disabled  { opacity: .4; cursor: not-allowed; }
+
+.empty-state { padding: 40px; text-align: center; color: var(--gray); font-size: 13.5px; }
+.load-error { display: none; background: rgba(214,59,59,0.12); border: 1px solid rgba(214,59,59,0.35); color: #FF8080; border-radius: 8px; padding: 10px 13px; font-size: 13px; margin-bottom: 14px; }
+</style>
+</head>
+<body>
+
+<nav>
+  <span class="logo">⚖️ RAG Legal Assistant</span>
+  <a href="/" class="btn-nav btn-back">← Quay về Chat</a>
+</nav>
+
+<main>
+  <div class="top-bar">
+    <h1>Quản lý tài khoản</h1>
+    <a href="/import_account" class="btn-import-account">📥 Import tài khoản</a>
+  </div>
+
+  <div class="load-error" id="loadError"></div>
+
+  <div class="table-card">
+    <table>
+      <thead>
+        <tr>
+          <th>Tên tài khoản</th>
+          <th>Vai trò</th>
+          <th>Quản lý</th>
+        </tr>
+      </thead>
+      <tbody id="usersTbody">
+        <tr><td colspan="3" class="empty-state">Đang tải…</td></tr>
+      </tbody>
+    </table>
+  </div>
+</main>
+
+<script>
+const ROLE_CLASS = { 0: 'student', 1: 'teacher', 2: 'admin' };
+let currentUserId = null;
+
+async function loadSession() {
+  try {
+    const res  = await fetch('/session_info');
+    const data = await res.json();
+    currentUserId = data.user_id;
+  } catch (e) {}
+}
+
+async function loadUsers() {
+  const tbody   = document.getElementById('usersTbody');
+  const errEl   = document.getElementById('loadError');
+  errEl.style.display = 'none';
+
+  try {
+    const res   = await fetch('/list_users');
+    if (res.status === 403) { window.location.href = '/'; return; }
+    const users = await res.json();
+
+    if (!Array.isArray(users) || users.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="3" class="empty-state">Chưa có tài khoản nào.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = users.map(u => {
+      const roleClass  = ROLE_CLASS[u.role] || 'student';
+      const isActive   = u.status === 0;
+      const isSelf     = u.user_id === currentUserId;
+      const statusHtml = isActive
+        ? '<span class="status-pill active">Đang hoạt động</span>'
+        : '<span class="status-pill disabled">Đã vô hiệu hóa</span>';
+      const toggleBtn = isActive
+        ? `<button class="btn-action btn-deactivate" ${isSelf ? 'disabled title="Không thể tự vô hiệu hóa"' : ''} onclick="toggleStatus(${u.user_id}, 1)">Vô hiệu hóa</button>`
+        : `<button class="btn-action btn-activate" onclick="toggleStatus(${u.user_id}, 0)">Kích hoạt</button>`;
+      const deleteBtn = `<button class="btn-action btn-delete" ${isSelf ? 'disabled title="Không thể tự xoá"' : ''} onclick="removeUser(${u.user_id}, '${u.user_name.replace(/'/g, "\\'")}')">Xoá</button>`;
+
+      return `
+        <tr>
+          <td>${escapeHtml(u.user_name)}${isSelf ? ' <span style="color:var(--gray);font-size:11px;">(bạn)</span>' : ''}</td>
+          <td>
+            <span class="role-pill ${roleClass}">${escapeHtml(u.role_name)}</span>
+            &nbsp;${statusHtml}
+          </td>
+          <td class="manage-actions">${toggleBtn}${deleteBtn}</td>
+        </tr>`;
+    }).join('');
+  } catch (e) {
+    errEl.textContent = '❌ Lỗi tải danh sách tài khoản: ' + e.message;
+    errEl.style.display = 'block';
+    tbody.innerHTML = '';
+  }
+}
+
+function escapeHtml(s) {
+  const div = document.createElement('div');
+  div.textContent = s;
+  return div.innerHTML;
+}
+
+async function toggleStatus(userId, newStatus) {
+  try {
+    const res  = await fetch('/toggle_user_status', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: userId, status: newStatus })
+    });
+    const data = await res.json();
+    if (data.status !== 'ok') throw new Error(data.message || 'Lỗi không xác định');
+    loadUsers();
+  } catch (e) {
+    alert('❌ ' + e.message);
+  }
+}
+
+async function removeUser(userId, userName) {
+  if (!confirm(`Xoá tài khoản "${userName}" và toàn bộ lịch sử chat? Hành động này không thể hoàn tác.`)) return;
+  try {
+    const res  = await fetch('/delete_user', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: userId })
+    });
+    const data = await res.json();
+    if (data.status !== 'ok') throw new Error(data.message || 'Lỗi không xác định');
+    loadUsers();
+  } catch (e) {
+    alert('❌ ' + e.message);
+  }
+}
+
+(async function init() {
+  await loadSession();
+  await loadUsers();
+})();
+</script>
+</body>
+</html>

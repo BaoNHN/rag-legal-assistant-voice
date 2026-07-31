@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Giọng nói của tôi – RAG Legal Assistant</title>
+<link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,600;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/material-design-icons/3.0.1/iconfont/material-icons.css"/>
+<style>
+:root {
+  --navy:   #0B1F3A;
+  --navy2:  #132843;
+  --teal:   #0A8C7E;
+  --teal2:  #0DB4A2;
+  --gold:   #E8A020;
+  --white:  #F7F9FC;
+  --gray:   #8A97A8;
+  --border: #D0D9E6;
+  --red:    #D63B3B;
+  --green:  #1D9B6C;
+  --radius: 10px;
+  --shadow: 0 4px 24px rgba(11,31,58,0.13);
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'DM Sans', sans-serif;
+  background: var(--navy);
+  color: var(--white);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+nav {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 28px;
+  background: var(--navy2);
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+}
+nav .logo {
+  font-family: 'Crimson Pro', serif;
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--teal2);
+  letter-spacing: .5px;
+  flex: 1;
+}
+.btn-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 18px;
+  border-radius: var(--radius);
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+  text-decoration: none;
+  border: none;
+  transition: all .18s;
+}
+.btn-back { background: rgba(255,255,255,0.07); color: var(--white); }
+.btn-back:hover { background: rgba(255,255,255,0.13); }
+
+main {
+  flex: 1;
+  padding: 36px 24px 60px;
+  max-width: 900px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+h1 {
+  font-family: 'Crimson Pro', serif;
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--white);
+  margin-bottom: 18px;
+}
+
+/* ── Disclaimer ─────────────────────────────────── */
+.disclaimer-card {
+  background: rgba(214,59,59,0.08);
+  border: 1px solid rgba(214,59,59,0.35);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+  margin-bottom: 24px;
+}
+.disclaimer-card h2 {
+  font-size: 14px;
+  color: #FF8080;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+}
+.disclaimer-card p {
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--white);
+  margin-bottom: 8px;
+}
+.disclaimer-card label {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--white);
+  margin-top: 12px;
+  cursor: pointer;
+}
+.disclaimer-card .btn-accept {
+  margin-top: 12px;
+  padding: 9px 20px;
+  background: var(--gold);
+  color: var(--navy);
+  font-weight: 600;
+  font-size: 13.5px;
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+.disclaimer-card .btn-accept:disabled { opacity: .4; cursor: not-allowed; }
+.disclaimer-card.accepted { display: none; }
+
+.gated { opacity: .35; pointer-events: none; filter: grayscale(60%); }
+
+/* ── Cards ──────────────────────────────────────── */
+.card {
+  background: var(--navy2);
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,0.07);
+  box-shadow: var(--shadow);
+  padding: 20px 22px;
+  margin-bottom: 20px;
+}
+.card h3 {
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 14px;
+  color: var(--white);
+}
+
+.profile-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.profile-row:last-child { border-bottom: none; }
+.profile-name { font-weight: 500; flex: 1; }
+.profile-sub { font-size: 11.5px; color: var(--gray); }
+
+.status-pill {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.status-pill.ready      { background: rgba(29,155,108,0.15); color: #4DFFB4; }
+.status-pill.new,
+.status-pill.collecting { background: rgba(232,160,32,0.15); color: var(--gold); }
+.status-pill.training   { background: rgba(30,136,229,0.15); color: #64B5F6; }
+.status-pill.failed     { background: rgba(214,59,59,0.15); color: #FF8080; }
+.status-pill.builtin    { background: rgba(141,110,99,0.15); color: #BCAAA4; }
+
+.btn-small {
+  padding: 6px 12px;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: 'DM Sans', sans-serif;
+  cursor: pointer;
+  border: 1.5px solid transparent;
+  background: rgba(255,255,255,0.07);
+  color: var(--white);
+}
+.btn-small:hover { background: rgba(255,255,255,0.13); }
+.btn-small.danger { color: #FF8080; }
+.btn-small:disabled { opacity: .4; cursor: not-allowed; }
+
+.new-profile-form {
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+}
+.new-profile-form input {
+  flex: 1;
+  padding: 9px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,0.05);
+  color: var(--white);
+  font-size: 13.5px;
+}
+.new-profile-form input::placeholder { color: var(--gray); }
+.new-profile-form button {
+  padding: 9px 18px;
+  border-radius: 8px;
+  border: none;
+  background: var(--teal2);
+  color: var(--navy);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* ── Recording panel ────────────────────────────── */
+.script-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+.script-item:last-child { border-bottom: none; }
+.script-title { flex: 1; font-size: 13.5px; }
+.script-title .done { color: #4DFFB4; margin-right: 6px; }
+.script-text {
+  font-size: 12px;
+  color: var(--gray);
+  margin-top: 3px;
+  line-height: 1.5;
+}
+.progress-note { font-size: 12.5px; color: var(--gray); margin: 10px 0; }
+
+.empty-state { padding: 20px; text-align: center; color: var(--gray); font-size: 13px; }
+.toast {
+  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+  background: #1e1e2e; color: #e2e8f0; padding: 10px 18px; border-radius: 8px;
+  font-size: 13px; z-index: 999; border: 1px solid rgba(255,255,255,0.15);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.4); opacity: 0; transition: opacity .3s; pointer-events: none;
+}
+</style>
+</head>
+<body>
+
+<nav>
+  <span class="logo">⚖️ RAG Legal Assistant</span>
+  <a href="/" class="btn-nav btn-back">← Quay về Chat</a>
+</nav>
+
+<main>
+  <h1>🎙 Giọng nói của tôi</h1>
+
+  <div class="disclaimer-card" id="disclaimerCard">
+    <h2>⚠️ Điều khoản sử dụng giọng nói</h2>
+    <p>Bản ghi âm giọng nói của bạn và giọng nói được tạo ra từ nó (voice clone) <strong>chỉ được sử dụng bên trong ứng dụng này</strong>
+       để đọc to nội dung trả lời trong khung chat theo giọng của chính bạn.</p>
+    <p>Bạn <strong>không được</strong> sử dụng giọng nói này để giả mạo bản thân hoặc người khác, tạo nội dung gây hiểu lầm,
+       hoặc dùng cho bất kỳ mục đích nào bên ngoài ứng dụng này. Mọi hậu quả pháp lý phát sinh từ việc sử dụng sai mục đích
+       thuộc trách nhiệm của người dùng, không phải của ứng dụng.</p>
+    <label>
+      <input type="checkbox" id="consentCheckbox"/>
+      Tôi đã đọc và đồng ý với điều khoản trên.
+    </label>
+    <br/>
+    <button class="btn-accept" id="acceptBtn" disabled>Đồng ý &amp; tiếp tục</button>
+  </div>
+
+  <div id="gatedContent" class="gated">
+    <div class="card">
+      <h3>Giọng nói của bạn</h3>
+      <div id="profilesList" class="empty-state">Đang tải…</div>
+
+      <p class="progress-note" id="profileLimitNote"></p>
+      <div class="new-profile-form" id="newProfileForm">
+        <input type="text" id="newProfileName" placeholder="Đặt tên cho giọng nói mới, ví dụ: Giọng của tôi"/>
+        <button id="createProfileBtn">+ Tạo giọng nói</button>
+      </div>
+    </div>
+
+    <div class="card" id="recordingCard" style="display:none;">
+      <h3 id="recordingCardTitle">Ghi âm mẫu giọng nói</h3>
+      <p class="progress-note" id="sampleProgress"></p>
+      <div id="scriptsList"></div>
+      <div style="margin-top:14px;">
+        <button class="btn-small" id="trainBtn" disabled>🚀 Bắt đầu huấn luyện</button>
+        <span class="status-pill" id="trainStatusPill" style="margin-left:10px;"></span>
+      </div>
+    </div>
+  </div>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const MIN_SAMPLES = {{ min_samples | default(5) }};
+const MAX_PROFILES = {{ max_profiles | default(2) }};
+let profiles = [];
+let scripts = [];
+let activeProfileId = null;
+let activeSamples = [];
+let mediaRecorder = null;
+let recordingChunks = [];
+let statusPollTimer = null;
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.opacity = '1';
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => { t.style.opacity = '0'; }, 3500);
+}
+
+function statusLabel(status) {
+  return { new: 'Chưa ghi âm', collecting: 'Đang thu mẫu', training: 'Đang huấn luyện',
+           ready: 'Sẵn sàng', failed: 'Lỗi', builtin: 'Có sẵn' }[status] || status;
+}
+
+async function loadSessionAndGate() {
+  const res  = await fetch('/session_info');
+  const data = await res.json();
+  if (data.voice_consent) {
+    document.getElementById('disclaimerCard').classList.add('accepted');
+    document.getElementById('gatedContent').classList.remove('gated');
+  }
+}
+
+document.getElementById('consentCheckbox').addEventListener('change', (e) => {
+  document.getElementById('acceptBtn').disabled = !e.target.checked;
+});
+
+document.getElementById('acceptBtn').addEventListener('click', async () => {
+  await fetch('/voice/consent', { method: 'POST' });
+  document.getElementById('disclaimerCard').classList.add('accepted');
+  document.getElementById('gatedContent').classList.remove('gated');
+  showToast('✓ Đã ghi nhận sự đồng ý.');
+});
+
+async function loadProfiles() {
+  profiles = await fetch('/voice/profiles').then(r => r.json());
+  const list = document.getElementById('profilesList');
+  if (!Array.isArray(profiles) || profiles.length === 0) {
+    list.innerHTML = '<div class="empty-state">Chưa có giọng nói nào.</div>';
+  } else {
+    list.innerHTML = profiles.map(p => renderProfileRow(p)).join('');
+  }
+  updateProfileLimitUI();
+}
+
+function updateProfileLimitUI() {
+  const clonedCount = profiles.filter(p => p.kind === 'cloned').length;
+  const note = document.getElementById('profileLimitNote');
+  const form = document.getElementById('newProfileForm');
+  const atLimit = clonedCount >= MAX_PROFILES;
+
+  note.textContent = atLimit
+    ? `Bạn đã có ${clonedCount}/${MAX_PROFILES} giọng nói riêng (tối đa hiện tại). Xoá một giọng nói cũ để tạo giọng mới.`
+    : `Bạn có ${clonedCount}/${MAX_PROFILES} giọng nói riêng.`;
+  form.classList.toggle('gated', atLimit);
+}
+
+function renderProfileRow(p) {
+  const isOwn = p.kind === 'cloned';
+  const badge = `<span class="status-pill ${p.status}">${statusLabel(p.status)}</span>`;
+  const defaultBtn = p.is_default
+    ? `<span class="status-pill ready">★ Mặc định</span>`
+    : `<button class="btn-small" onclick="setDefault(${p.id})">Đặt mặc định</button>`;
+  const manageBtn = isOwn ? `<button class="btn-small" onclick="openRecording(${p.id})">Ghi âm mẫu</button>` : '';
+  const deleteBtn = isOwn ? `<button class="btn-small danger" onclick="deleteProfile(${p.id})">Xoá</button>` : '';
+  return `
+    <div class="profile-row">
+      <div>
+        <div class="profile-name">${escapeHtml(p.name)}</div>
+        <div class="profile-sub">${isOwn ? 'Giọng cá nhân' : 'Giọng hệ thống'}${p.error_message ? ' — ' + escapeHtml(p.error_message) : ''}</div>
+      </div>
+      ${badge}
+      ${defaultBtn}
+      ${manageBtn}
+      ${deleteBtn}
+    </div>`;
+}
+
+function escapeHtml(s) {
+  const div = document.createElement('div');
+  div.textContent = s;
+  return div.innerHTML;
+}
+
+async function setDefault(profileId) {
+  await fetch(`/voice/profiles/${profileId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ is_default: true })
+  });
+  loadProfiles();
+}
+
+async function deleteProfile(profileId) {
+  if (!confirm('Xoá giọng nói này và toàn bộ mẫu ghi âm? Không thể hoàn tác.')) return;
+  const res  = await fetch(`/voice/profiles/${profileId}`, { method: 'DELETE' });
+  const data = await res.json();
+  if (data.message) showToast('⚠️ ' + data.message);
+  if (activeProfileId === profileId) {
+    document.getElementById('recordingCard').style.display = 'none';
+    activeProfileId = null;
+  }
+  loadProfiles();
+}
+
+document.getElementById('createProfileBtn').addEventListener('click', async () => {
+  const input = document.getElementById('newProfileName');
+  const name  = input.value.trim();
+  if (!name) { showToast('Vui lòng nhập tên.'); return; }
+
+  const res  = await fetch('/voice/profiles', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name })
+  });
+  const data = await res.json();
+  if (data.status !== 'ok') { showToast('❌ ' + (data.message || 'Lỗi')); return; }
+
+  input.value = '';
+  await loadProfiles();
+  openRecording(data.profile_id);
+});
+
+// ── Recording / upload panel ──────────────────────────────────────────────
+async function loadScripts() {
+  scripts = await fetch('/voice/scripts').then(r => r.json());
+}
+
+async function openRecording(profileId) {
+  activeProfileId = profileId;
+  const profile = profiles.find(p => p.id === profileId) || {};
+  document.getElementById('recordingCardTitle').textContent = `Ghi âm mẫu cho "${profile.name || ''}"`;
+  document.getElementById('recordingCard').style.display = 'block';
+  document.getElementById('recordingCard').scrollIntoView({ behavior: 'smooth' });
+  await refreshSamples();
+}
+
+async function refreshSamples() {
+  const [profile, samples] = await Promise.all([
+    fetch(`/voice/profiles/${activeProfileId}/status`).then(r => r.json()),
+    fetch(`/voice/profiles/${activeProfileId}/samples`).then(r => r.json()),
+  ]);
+
+  activeSamples = Array.isArray(samples) ? samples : [];
+  recordedScriptIds = new Set(activeSamples.map(s => s.script_id));
+
+  renderScriptsList(profile);
+  updateTrainStatusUI(profile);
+
+  if (profile.status === 'training') {
+    if (!statusPollTimer) statusPollTimer = setInterval(refreshSamples, 5000);
+  } else if (statusPollTimer) {
+    clearInterval(statusPollTimer);
+    statusPollTimer = null;
+  }
+}
+
+let recordedScriptIds = new Set();
+
+function renderScriptsList(profile) {
+  const container = document.getElementById('scriptsList');
+  if (scripts.length === 0) { container.innerHTML = '<div class="empty-state">Không có đoạn văn bản mẫu.</div>'; return; }
+
+  container.innerHTML = scripts.map(s => {
+    const done = recordedScriptIds.has(s.id);
+    return `
+      <div class="script-item" data-script-id="${s.id}">
+        <div class="script-title">
+          ${done ? '<span class="done">✓</span>' : ''}${escapeHtml(s.title)}
+          <div class="script-text">${escapeHtml(s.text)}</div>
+        </div>
+        <button class="btn-small" onclick="toggleRecord('${s.id}', this)">🎙 Ghi âm</button>
+        <label class="btn-small" style="cursor:pointer;">
+          📁 Tải lên
+          <input type="file" accept="audio/*" style="display:none;" onchange="uploadSample('${s.id}', this.files[0])"/>
+        </label>
+      </div>`;
+  }).join('');
+
+  document.getElementById('sampleProgress').textContent =
+    `Đã ghi ${recordedScriptIds.size} / ${scripts.length} đoạn (tối thiểu ${MIN_SAMPLES} để huấn luyện).`;
+  document.getElementById('trainBtn').disabled = recordedScriptIds.size < MIN_SAMPLES || profile.status === 'training';
+}
+
+function updateTrainStatusUI(profile) {
+  const pill = document.getElementById('trainStatusPill');
+  pill.className = `status-pill ${profile.status}`;
+  pill.textContent = statusLabel(profile.status) + (profile.error_message ? ': ' + profile.error_message : '');
+}
+
+async function toggleRecord(scriptId, btnEl) {
+  if (mediaRecorder && mediaRecorder.state === 'recording') {
+    mediaRecorder.stop();
+    return;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    recordingChunks = [];
+    mediaRecorder = new MediaRecorder(stream);
+    mediaRecorder.ondataavailable = e => { if (e.data.size > 0) recordingChunks.push(e.data); };
+    mediaRecorder.onstop = async () => {
+      stream.getTracks().forEach(t => t.stop());
+      const blob = new Blob(recordingChunks, { type: 'audio/webm' });
+      await sendSample(scriptId, blob, 'recording.webm');
+    };
+    mediaRecorder.start();
+    btnEl.textContent = '⏹ Dừng ghi';
+    showToast('Đang ghi âm… bấm lại để dừng.');
+  } catch (e) {
+    showToast('Không thể truy cập microphone: ' + e.message);
+  }
+}
+
+async function uploadSample(scriptId, file) {
+  if (!file) return;
+  await sendSample(scriptId, file, file.name);
+}
+
+async function sendSample(scriptId, blobOrFile, filename) {
+  const formData = new FormData();
+  formData.append('script_id', scriptId);
+  formData.append('audio', blobOrFile, filename);
+
+  const res  = await fetch(`/voice/profiles/${activeProfileId}/samples`, { method: 'POST', body: formData });
+  const data = await res.json();
+  if (data.status !== 'ok') { showToast('❌ ' + (data.message || 'Lỗi tải mẫu lên')); return; }
+
+  recordedScriptIds.add(scriptId);
+  showToast('✓ Đã lưu mẫu ghi âm.');
+  await refreshSamples();
+}
+
+document.getElementById('trainBtn').addEventListener('click', async () => {
+  const res  = await fetch(`/voice/profiles/${activeProfileId}/train`, { method: 'POST' });
+  const data = await res.json();
+  if (data.status !== 'ok') { showToast('❌ ' + (data.message || 'Lỗi')); return; }
+  showToast('🚀 ' + data.message);
+  refreshSamples();
+});
+
+(async function init() {
+  await loadSessionAndGate();
+  await loadScripts();
+  await loadProfiles();
+})();
+</script>
+</body>
+</html>
