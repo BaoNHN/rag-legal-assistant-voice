@@ -99,6 +99,7 @@
       border-color: #0DB4A2;
     }
     .btn-my-voice.hidden { display: none; }
+    #micButton.hidden { display: none; }
 
     .btn-admin-voice {
       display: none;
@@ -325,6 +326,9 @@
         </div>
         <div class="input-area">
           <input id="chatInput" type="text" placeholder="Nhập câu hỏi về Luật Doanh nghiệp…"/>
+          <button id="micButton" type="button" title="Hỏi bằng giọng nói">
+            <span class="material-icons">mic</span>
+          </button>
           <button id="sendButton">
             <span class="material-icons">send</span> Gửi
           </button>
@@ -378,6 +382,7 @@ window.isGuest = false;
       document.getElementById("myVoiceBtn").classList.add("hidden");
       document.getElementById("notifWrap").classList.add("hidden");
       document.getElementById("voiceSelectBar").classList.add("hidden");
+      document.getElementById("micButton").classList.add("hidden");
       return;
     }
 

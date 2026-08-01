@@ -1,250 +1,144 @@
 """
 voice/station_client.py
-HTTP client for clone-voice-station — the standalone service that now owns all
-voice training/storage/management (see D:\\hoc\\project\\clone-voice-station).
+Thin adapter over the installable `clone-voice-client` package (see
+D:\\hoc\\project\\clone-voice-client) — the actual HTTP logic for talking to
+clone-voice-station (the standalone voice/STT/TTS/RVC service, see
+D:\\hoc\\project\\clone-voice-station) now lives in that package so any new
+AI-assistant project can `pip install` it instead of copying a file around.
+This module exists only so app.py's existing `station_client.xxx(...)` call
+sites keep working unchanged.
 
-This app authenticates itself to the station with a shared API key (read from
-voice_station_key.txt) and identifies each end user as an opaque
-external_user_id (str(session["user_id"])) — the station has no login of its
-own and trusts this app to have already checked who's logged in / who's admin.
-
-All functions degrade gracefully when the station is unreachable or the key
-file is missing: reads return empty/None, writes raise VoiceStationError with
-a message safe to show the user. Callers (app.py routes) turn that into a
-clean error response instead of a 500.
+This app authenticates itself to the station with a shared API key (read once
+at import time from voice_station_key.txt) and identifies each end user as an
+opaque external_user_id (str(session["user_id"])) — the station has no login
+of its own and trusts this app to have already checked who's logged in /
+who's admin. All functions degrade gracefully when the station is
+unreachable — see clone_voice_client.VoiceStationClient's own docstring.
 """
 
 import os
-import requests
 
-BASE_DIR     = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-KEY_PATH     = os.path.join(BASE_DIR, "voice_station_key.txt")
-STATION_URL  = os.getenv("VOICE_STATION_URL", "http://127.0.0.1:8090").rstrip("/")
+from clone_voice_client import (
+    VoiceStationClient, VoiceStationError, MIN_TRAIN_SAMPLES, MAX_CLONED_VOICES_PER_USER,
+)
 
-REQUEST_TIMEOUT       = int(os.getenv("VOICE_STATION_TIMEOUT", "15"))
-SPEAK_TIMEOUT         = int(os.getenv("VOICE_STATION_SPEAK_TIMEOUT", "30"))
-UPLOAD_TIMEOUT        = int(os.getenv("VOICE_STATION_UPLOAD_TIMEOUT", "30"))
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+KEY_PATH = os.path.join(BASE_DIR, "voice_station_key.txt")
 
-# Display-only copies of clone-voice-station's own limits (it enforces these
-# server-side regardless) — used to render voice_profile.html's hint text
-# without an extra round-trip. Keep in sync with clone-voice-station/database/database.py.
-MIN_TRAIN_SAMPLES           = 5
-MAX_CLONED_VOICES_PER_USER  = 2
-
-
-class VoiceStationError(Exception):
-    """Raised on any failure talking to clone-voice-station — message is
-    already user-safe Vietnamese text, ready to bubble up in a JSONResponse."""
-    def __init__(self, message: str, status_code: int = 502):
-        super().__init__(message)
-        self.message     = message
-        self.status_code = status_code
-
-
-def _api_key() -> str:
-    if not os.path.exists(KEY_PATH):
-        return ""
-    with open(KEY_PATH, "r") as f:
-        return f.read().strip()
+_client = VoiceStationClient.from_key_file(
+    KEY_PATH,
+    base_url=os.getenv("VOICE_STATION_URL", "http://127.0.0.1:8090"),
+    request_timeout=int(os.getenv("VOICE_STATION_TIMEOUT", "15")),
+    speak_timeout=int(os.getenv("VOICE_STATION_SPEAK_TIMEOUT", "30")),
+    upload_timeout=int(os.getenv("VOICE_STATION_UPLOAD_TIMEOUT", "30")),
+)
 
 
 def get_own_api_key() -> str:
     """The key this app authenticates itself to the station with — also used
     to verify an inbound webhook call really came from the station, since it
     echoes this same key back in X-Api-Key (see app.py's POST /voice/webhook)."""
-    return _api_key()
-
-
-def _headers() -> dict:
-    return {"X-Api-Key": _api_key()}
-
-
-def _raise_for_response(resp):
-    if resp.status_code >= 400:
-        try:
-            detail = resp.json().get("detail", f"HTTP {resp.status_code}")
-        except Exception:
-            detail = f"HTTP {resp.status_code}"
-        raise VoiceStationError(detail, status_code=resp.status_code)
-
-
-def _get(path: str, params: dict = None, timeout: int = REQUEST_TIMEOUT):
-    try:
-        resp = requests.get(f"{STATION_URL}{path}", headers=_headers(), params=params, timeout=timeout)
-    except requests.exceptions.RequestException as e:
-        raise VoiceStationError(f"Không kết nối được tới voice station: {e}", status_code=503)
-    _raise_for_response(resp)
-    return resp.json()
-
-
-def _post(path: str, json: dict = None, timeout: int = REQUEST_TIMEOUT):
-    try:
-        resp = requests.post(f"{STATION_URL}{path}", headers=_headers(), json=json or {}, timeout=timeout)
-    except requests.exceptions.RequestException as e:
-        raise VoiceStationError(f"Không kết nối được tới voice station: {e}", status_code=503)
-    _raise_for_response(resp)
-    return resp.json()
-
-
-def _put(path: str, json: dict = None, timeout: int = REQUEST_TIMEOUT):
-    try:
-        resp = requests.put(f"{STATION_URL}{path}", headers=_headers(), json=json or {}, timeout=timeout)
-    except requests.exceptions.RequestException as e:
-        raise VoiceStationError(f"Không kết nối được tới voice station: {e}", status_code=503)
-    _raise_for_response(resp)
-    return resp.json()
-
-
-def _delete(path: str, params: dict = None, timeout: int = REQUEST_TIMEOUT):
-    try:
-        resp = requests.delete(f"{STATION_URL}{path}", headers=_headers(), params=params, timeout=timeout)
-    except requests.exceptions.RequestException as e:
-        raise VoiceStationError(f"Không kết nối được tới voice station: {e}", status_code=503)
-    _raise_for_response(resp)
-    return resp.json()
+    return _client.get_own_api_key()
 
 
 def is_available() -> bool:
-    try:
-        resp = requests.get(f"{STATION_URL}/api/health", timeout=5)
-        return resp.status_code == 200
-    except requests.exceptions.RequestException:
-        return False
+    return _client.is_available()
 
 
-# ── Scripts / consent / profiles ────────────────────────────────────────────────
+# ── Scripts / consent / profiles ────────────────────────────────────────────
 def get_scripts() -> list:
-    return _get("/api/scripts")
+    return _client.get_scripts()
 
 
 def has_voice_consent(external_user_id: str) -> bool:
-    try:
-        return bool(_get("/api/consent", params={"external_user_id": external_user_id}).get("consent"))
-    except VoiceStationError:
-        return False  # station unreachable — degrade to "no consent" rather than break login/session_info
+    return _client.has_voice_consent(external_user_id)
 
 
 def record_voice_consent(external_user_id: str):
-    _post("/api/consent", {"external_user_id": external_user_id})
+    _client.record_voice_consent(external_user_id)
 
 
 def list_voice_profiles(external_user_id: str) -> list:
-    try:
-        return _get("/api/profiles", params={"external_user_id": external_user_id})
-    except VoiceStationError:
-        return []
+    return _client.list_voice_profiles(external_user_id)
 
 
 def create_voice_profile(external_user_id: str, name: str) -> int:
-    return _post("/api/profiles", {"external_user_id": external_user_id, "name": name})["profile_id"]
+    return _client.create_voice_profile(external_user_id, name)
 
 
 def update_voice_profile(profile_id: int, external_user_id: str, name: str = None, is_default: bool = None):
-    payload = {"external_user_id": external_user_id}
-    if name is not None:
-        payload["name"] = name
-    if is_default is not None:
-        payload["is_default"] = is_default
-    return _put(f"/api/profiles/{profile_id}", payload)
+    return _client.update_voice_profile(profile_id, external_user_id, name=name, is_default=is_default)
 
 
 def delete_voice_profile(profile_id: int, external_user_id: str) -> dict:
-    return _delete(f"/api/profiles/{profile_id}", params={"external_user_id": external_user_id})
+    return _client.delete_voice_profile(profile_id, external_user_id)
 
 
 def get_voice_profile_status(profile_id: int, external_user_id: str) -> dict:
-    return _get(f"/api/profiles/{profile_id}/status", params={"external_user_id": external_user_id})
+    return _client.get_voice_profile_status(profile_id, external_user_id)
 
 
 # ── Samples ──────────────────────────────────────────────────────────────────
 def upload_voice_sample(profile_id: int, external_user_id: str, script_id: str,
                          filename: str, content: bytes) -> dict:
-    try:
-        resp = requests.post(
-            f"{STATION_URL}/api/profiles/{profile_id}/samples",
-            headers=_headers(),
-            data={"external_user_id": external_user_id, "script_id": script_id},
-            files={"audio": (filename, content)},
-            timeout=UPLOAD_TIMEOUT,
-        )
-    except requests.exceptions.RequestException as e:
-        raise VoiceStationError(f"Không kết nối được tới voice station: {e}", status_code=503)
-    _raise_for_response(resp)
-    return resp.json()
+    return _client.upload_voice_sample(profile_id, external_user_id, script_id, filename, content)
 
 
 def list_voice_samples(profile_id: int, external_user_id: str) -> list:
-    return _get(f"/api/profiles/{profile_id}/samples", params={"external_user_id": external_user_id})
+    return _client.list_voice_samples(profile_id, external_user_id)
 
 
 def delete_voice_sample(profile_id: int, sample_id: int, external_user_id: str):
-    return _delete(f"/api/profiles/{profile_id}/samples/{sample_id}", params={"external_user_id": external_user_id})
+    return _client.delete_voice_sample(profile_id, sample_id, external_user_id)
 
 
 def train_voice_profile(profile_id: int, external_user_id: str) -> dict:
-    return _post(f"/api/profiles/{profile_id}/train", {"external_user_id": external_user_id})
+    return _client.train_voice_profile(profile_id, external_user_id)
+
+
+# ── Transcribe (STT — input half of the voice loop) ─────────────────────────
+def transcribe(filename: str, content: bytes, mime: str = None, language: str = "vi") -> dict:
+    return _client.transcribe(filename, content, mime=mime, language=language)
 
 
 # ── Speak (TTS + optional RVC) ───────────────────────────────────────────────
 def speak(text: str, external_user_id: str, profile_id: int = None) -> dict:
-    """Returns {"audio": bytes, "mime": str}."""
-    try:
-        resp = requests.post(
-            f"{STATION_URL}/api/speak",
-            headers=_headers(),
-            json={"text": text, "external_user_id": external_user_id, "profile_id": profile_id},
-            timeout=SPEAK_TIMEOUT,
-        )
-    except requests.exceptions.RequestException as e:
-        raise VoiceStationError(f"Không kết nối được tới voice station: {e}", status_code=503)
-    _raise_for_response(resp)
-    return {"audio": resp.content, "mime": resp.headers.get("content-type", "audio/mpeg")}
+    return _client.speak(text, external_user_id, profile_id)
 
 
 # ── Admin (client-wide, gated by is_admin() in app.py before calling these) ─────
 def list_all_voice_profiles() -> list:
-    return _get("/api/admin/voice_models")
+    return _client.list_all_voice_profiles()
 
 
 def admin_retrain_voice_model(profile_id: int) -> dict:
-    return _post(f"/api/admin/voice_models/{profile_id}/retrain")
+    return _client.admin_retrain_voice_model(profile_id)
 
 
 def admin_disable_voice_model(profile_id: int) -> dict:
-    return _post(f"/api/admin/voice_models/{profile_id}/disable")
+    return _client.admin_disable_voice_model(profile_id)
 
 
 def admin_delete_voice_model(profile_id: int) -> dict:
-    return _delete(f"/api/admin/voice_models/{profile_id}")
+    return _client.admin_delete_voice_model(profile_id)
 
 
 def get_rvc_endpoint() -> dict:
-    return _get("/api/rvc_endpoint")
+    return _client.get_rvc_endpoint()
 
 
 def set_rvc_endpoint(endpoint: str) -> dict:
-    return _post("/api/rvc_endpoint", {"endpoint": endpoint})
+    return _client.set_rvc_endpoint(endpoint)
 
 
 # ── Notifications: manager-triggered delete/disable events ──────────────────────
 def register_webhook(webhook_url: str):
-    """Self-registers this app's callback URL so clone-voice-station can push
-    delete/disable notifications instead of us having to poll for them. Safe
-    to call on every startup — it's just an upsert."""
-    _post("/api/webhook", {"webhook_url": webhook_url})
+    _client.register_webhook(webhook_url)
 
 
 def poll_undelivered_notifications(external_user_id: str) -> list:
-    """Fallback path for when the webhook was never registered or a push
-    attempt failed — returns notifications the station couldn't deliver yet."""
-    try:
-        return _get("/api/notifications", params={"external_user_id": external_user_id})
-    except VoiceStationError:
-        return []
+    return _client.poll_undelivered_notifications(external_user_id)
 
 
 def ack_notification(notification_id: int):
-    try:
-        _post(f"/api/notifications/{notification_id}/ack")
-    except VoiceStationError:
-        pass  # best-effort — a missed ack just means it's re-delivered next poll
+    _client.ack_notification(notification_id)

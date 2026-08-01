@@ -57,5 +57,8 @@ opencv-python-headless==4.11.0.86
 # Word document support
 python-docx>=1.1.2
 
-# Voice feature — talks to clone-voice-station (separate service, see voice/station_client.py)
+# Voice feature — talks to clone-voice-station (separate service) via the
+# installable clone-voice-client SDK (sibling project, see
+# voice/station_client.py, now a thin adapter over this package).
+-e ../clone-voice-client
 requests>=2.31.0

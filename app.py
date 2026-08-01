@@ -1156,6 +1156,25 @@ async def voice_profile_status_route(profile_id: int, request: Request):
         return _voice_error(e)
 
 
+@app.post("/voice/transcribe")
+async def voice_transcribe_route(request: Request, audio: UploadFile = File(...)):
+    """Speech-to-Text — input half of the voice loop (see /voice/speak below
+    for the output half). Delegates to clone-voice-station's Whisper-backed
+    /api/transcribe; the returned text is just typed into chatInput
+    client-side (script.js), same as if the user had typed it themselves."""
+    if not logged_in(request):
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+    content = await audio.read()
+    try:
+        result = station_client.transcribe(
+            audio.filename or "recording.webm", content, mime=audio.content_type,
+        )
+    except VoiceStationError as e:
+        return _voice_error(e)
+    return result
+
+
 @app.post("/voice/speak")
 async def voice_speak_route(request: Request):
     if not logged_in(request):

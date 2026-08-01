@@ -633,6 +633,22 @@ body {
     cursor: not-allowed;
 }
 
+/* ── Mic (speech-to-text) button ─────────────────── */
+#micButton {
+    background-color: #757575;
+    margin-right: 8px;
+    padding: 10px 12px;
+}
+#micButton:hover { background-color: #5a5a5a; }
+#micButton .material-icons { margin-right: 0; }
+#micButton.recording { background-color: #E53935; animation: pulse 1.1s ease-in-out infinite; }
+#micButton.transcribing { background-color: #6200EA; animation: spin 1s linear infinite; }
+
+@keyframes pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(229,57,53,0.45); }
+    50%      { box-shadow: 0 0 0 8px rgba(229,57,53,0); }
+}
+
 /* ---------------------------------------------------
    CHAT LIMIT PICKER (shown when the 5-chat cap is hit)
 --------------------------------------------------- */

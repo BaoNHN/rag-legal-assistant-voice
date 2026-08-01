@@ -1,4 +1,5 @@
 const sendButton = document.getElementById("sendButton");
+const micButton = document.getElementById("micButton");
 const chatInput = document.getElementById("chatInput");
 const chatbox = document.getElementById("chatbox");
 const chatList = document.getElementById("chat-list");
@@ -214,6 +215,55 @@ async function speakMessage(text, btn) {
         console.error('[Voice] Đọc to thất bại:', e);
     }
 }
+
+// ── Mic (speech-to-text) button ───────────────────────────────────────────
+let _mediaRecorder = null;
+let _recordingChunks = [];
+
+micButton?.addEventListener('click', async () => {
+    if (_mediaRecorder && _mediaRecorder.state === 'recording') {
+        _mediaRecorder.stop();  // triggers onstop below, which sends the audio off
+        return;
+    }
+
+    let stream;
+    try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (e) {
+        alert('Không thể truy cập microphone: ' + e.message);
+        return;
+    }
+
+    _recordingChunks = [];
+    _mediaRecorder = new MediaRecorder(stream);
+    _mediaRecorder.ondataavailable = e => { if (e.data.size > 0) _recordingChunks.push(e.data); };
+    _mediaRecorder.onstop = async () => {
+        stream.getTracks().forEach(t => t.stop());
+        micButton.classList.remove('recording');
+        micButton.classList.add('transcribing');
+
+        const blob = new Blob(_recordingChunks, { type: 'audio/webm' });
+        try {
+            const formData = new FormData();
+            formData.append('audio', blob, 'recording.webm');
+            const resp = await fetch('/voice/transcribe', { method: 'POST', body: formData });
+            const data = await resp.json();
+            if (!resp.ok) throw new Error(data.error || data.detail || ('HTTP ' + resp.status));
+            // Fill the input rather than auto-send — Whisper can mishear Vietnamese
+            // legal terms, so the user gets a chance to review/edit before sending.
+            chatInput.value = data.text || '';
+            chatInput.focus();
+        } catch (e) {
+            console.error('[Voice] Nhận diện giọng nói thất bại:', e);
+            alert('Không nhận diện được giọng nói: ' + e.message);
+        } finally {
+            micButton.classList.remove('transcribing');
+        }
+    };
+
+    _mediaRecorder.start();
+    micButton.classList.add('recording');
+});
 
 async function callApi(prompt) {
     chatInput.value = "Đang gửi…";
