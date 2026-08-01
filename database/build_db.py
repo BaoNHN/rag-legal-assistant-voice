@@ -196,7 +196,7 @@ print(f"  kept documents        : {len(docs)}")
 # Safe to run multiple times.
 # =========================
 print("Loading embedding model...")
-embedding = HuggingFaceEmbeddings(model_name="BAAI/bge-small-en-v1.5")
+embedding = HuggingFaceEmbeddings(model_name="BAAI/bge-m3")
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # database/ → root
 DB_PATH  = os.path.join(BASE_DIR, "chroma_db")

@@ -21,6 +21,14 @@ posthog==3.5.0
 # Embedding
 sentence-transformers==2.7.0
 
+# torch is intentionally NOT pinned here — install.bat installs it separately
+# (CUDA 11.8 / CUDA 12.1 / CPU-only, picked interactively) so this file works
+# regardless of GPU availability. Whichever build you install, it MUST be
+# torch>=2.6: transformers refuses to load model checkpoints (incl. the
+# BAAI/bge-m3 embedding model used in engine/rag_engine.py) via torch.load
+# below that version — see CVE-2025-32434. If installing torch manually:
+#   pip install "torch>=2.6" torchvision --index-url https://download.pytorch.org/whl/cpu
+
 # PDF
 pypdf==4.2.0
 

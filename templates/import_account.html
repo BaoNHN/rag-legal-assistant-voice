@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Import tài khoản – RAG Legal Assistant</title>
+<title>Nhập tài khoản – RAG Legal Assistant</title>
 <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,600;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
 <style>
 :root {
@@ -207,7 +207,7 @@ main {
 
 <main>
   <div class="upload-card">
-    <h1 class="panel-title">Import tài khoản</h1>
+    <h1 class="panel-title">Nhập tài khoản</h1>
     <p class="panel-subtitle">Tải lên file <span>.xlsx</span> để tạo hàng loạt tài khoản</p>
 
     <a href="/download_account_template" class="template-link">⬇️ Tải file Excel mẫu</a>
@@ -233,12 +233,12 @@ main {
 
     <button class="btn-submit" id="accSubmitBtn" onclick="handleAccSubmit()">
       <div class="spinner" id="accSpinner"></div>
-      <span id="accBtnText">📥 Import tài khoản</span>
+      <span id="accBtnText">📥 Nhập tài khoản</span>
     </button>
 
     <div class="success-banner" id="accSuccessBanner">
       <div class="s-icon">✅</div>
-      <h3>Import hoàn tất!</h3>
+      <h3>Nhập hoàn tất!</h3>
       <p id="accSuccessMsg"></p>
       <button class="btn-submit" id="accErrorBtn" style="display:none; background: var(--red); margin-top: 12px;" onclick="downloadAccErrors()">
         ⚠️ Tải tài khoản lỗi
@@ -313,13 +313,13 @@ async function handleAccSubmit() {
         document.getElementById('accErrorBtn').style.display = 'inline-flex';
       }
     } else {
-      throw new Error(data.message || 'Server error');
+      throw new Error(data.message || 'Lỗi máy chủ');
     }
   } catch (err) {
     errEl.textContent = '❌ Lỗi: ' + err.message; errEl.style.display = 'block';
     btn.disabled = false;
     document.getElementById('accSpinner').style.display = 'none';
-    document.getElementById('accBtnText').textContent   = '📥 Import tài khoản';
+    document.getElementById('accBtnText').textContent   = '📥 Nhập tài khoản';
   }
 }
 

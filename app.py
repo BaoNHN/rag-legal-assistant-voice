@@ -5,23 +5,41 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 import os
 import re
+import time
 import uuid
 import io
+import warnings
+
+# Silence two known-harmless, third-party UserWarnings (see
+# evaluate/evaluate_rag.py's matching filter for the full explanation):
+# gdown 4.4.0 (transitive dep of vietocr, imported below via
+# engine.import_law_engine for PDF OCR) still uses deprecated pkg_resources;
+# openpyxl warns on Excel conditional-formatting/data-validation features it
+# doesn't parse when reading uploaded .xlsx files, without affecting the
+# actual cell data read. Registered before the import_law_engine import below.
+warnings.filterwarnings("ignore", message="pkg_resources is deprecated.*")
+warnings.filterwarnings("ignore", message=".*Conditional Formatting extension.*")
+warnings.filterwarnings("ignore", message=".*Data Validation extension.*")
 
 from engine.rag_engine import (
     ask_rag,
-    list_indexed_sources, delete_source,
-    list_dataset_sources, delete_dataset_source,
+    list_indexed_sources, delete_source, get_law_source_info, get_law_source_articles,
     list_scenario_sources, delete_scenario_source,
+    list_dataset_sources, delete_dataset_source,
 )
 from database.database import (
     init_db, get_conn,
     login_user,
     create_chat, get_all_chats,
-    save_message, get_messages,
+    save_message, get_messages, count_user_messages,
     rename_chat, delete_chat,
+    get_chat_title, NOTIFICATION_CHAT_TITLE, MAX_CHATS_PER_USER, MAX_MESSAGES_PER_CHAT,
     get_all_users, set_user_status, delete_user,
     change_user_password,
+    create_keyword, get_all_keywords, get_active_keywords,
+    get_active_priority_keywords, set_keyword_status, get_source_keywords,
+    set_source_keywords, MAX_KEYWORD_NAME_LENGTH, get_tagged_articles,
+    get_all_dataset_files, delete_dataset_file,
     create_voice_notification, list_voice_notifications,
     count_unread_voice_notifications, mark_voice_notifications_read,
 )
@@ -29,6 +47,7 @@ from engine.import_law_engine import run_import, get_job
 from engine.import_scenario_engine import run_import_scenario, get_scenario_job
 from engine.import_dataset_engine import run_import_dataset, get_dataset_job
 from engine.evaluate_engine import run_evaluation, get_eval_job, list_available_datasets, get_latest_eval_result
+from engine.regression_test_engine import run_regression_tests, get_regression_job, get_latest_regression_results
 from engine.import_account_engine import run_import_accounts, build_template_bytes
 from voice import station_client
 from voice.station_client import MIN_TRAIN_SAMPLES, MAX_CLONED_VOICES_PER_USER, VoiceStationError
@@ -44,6 +63,11 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 app.mount("/static", StaticFiles(directory=os.path.join(BASE_DIR, "static")), name="static")
 templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
+# Cache-busting query param for /static/* asset URLs — bumps on every server
+# restart so browsers can't keep serving a stale cached style.css/script.js
+# after a deploy (this was the actual cause of a UI change appearing "not
+# applied" a few times during development, not a real code bug).
+templates.env.globals["static_version"] = str(int(time.time()))
 
 init_db()
 
@@ -70,16 +94,35 @@ def is_teacher(request: Request) -> bool:
 def is_admin(request: Request) -> bool:
     return request.session.get("role", 0) == 2
 
+def _parse_keyword_ids(raw: str) -> list:
+    """Parses a comma-joined string of keyword ids (as sent by the tag-picker
+    FormData field) into a list of ints, silently dropping non-numeric parts."""
+    out = []
+    for part in (raw or "").split(","):
+        part = part.strip()
+        if part.isdigit():
+            out.append(int(part))
+    return out
+
 
 # ── Pages ─────────────────────────────────────────────────────────────────────
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
-    if not logged_in(request):
-        return templates.TemplateResponse(request, "login.html")
+    # Guests (not logged in) get index.html too — a single, ephemeral,
+    # never-persisted chat capped at MAX_MESSAGES_PER_CHAT (see /get below).
+    # They can still reach /login from the header to get a full account.
     return templates.TemplateResponse(request, "index.html", {
         "is_teacher": is_teacher(request),
         "is_admin":   is_admin(request),
+        "is_guest":   not logged_in(request),
     })
+
+
+@app.get("/login", response_class=HTMLResponse)
+async def login_page(request: Request):
+    if logged_in(request):
+        return RedirectResponse("/")
+    return templates.TemplateResponse(request, "login.html")
 
 
 @app.get("/voice", response_class=HTMLResponse)
@@ -115,7 +158,7 @@ async def manage_accounts_page(request: Request):
 
 @app.get("/manage_law", response_class=HTMLResponse)
 async def manage_law_page(request: Request):
-    if not logged_in(request) or not is_admin(request):
+    if not logged_in(request) or not is_teacher(request):
         return RedirectResponse("/", status_code=302)
     return templates.TemplateResponse(request, "manage_law.html")
 
@@ -142,6 +185,7 @@ async def login(request: Request):
         )
     if user:
         request.session["user_id"]   = user["user_id"]
+        request.session["user_name"] = user["user_name"]
         request.session["user_type"] = user["user_type"]
         request.session["role"]      = int(user["role"])
         return {"status": "success", "user_type": user["user_type"]}
@@ -172,12 +216,42 @@ async def chatbot(request: Request):
         data       = await request.json()
         user_input = data.get("prompt")
         chat_id    = data.get("chat_id")
+        voice      = data.get("voice", "formal")
+        if voice not in ("formal", "casual"):
+            voice = "formal"
 
         if not user_input:
             return {"status": "error", "text": "⚠️ Bạn chưa nhập câu hỏi."}
 
+        # Guests: single ephemeral chat, nothing written to chat.db. Turn
+        # count lives only in the signed session cookie (same cap as
+        # logged-in users, MAX_MESSAGES_PER_CHAT), so it resets if the
+        # session cookie is cleared/expires — that's fine, guests have no
+        # history to lose either way.
+        if not logged_in(request):
+            guest_count = request.session.get("guest_msg_count", 0)
+            if guest_count >= MAX_MESSAGES_PER_CHAT:
+                return {
+                    "status": "limit",
+                    "text": f"⚠️ Bạn đã dùng hết {MAX_MESSAGES_PER_CHAT} câu hỏi miễn phí cho khách. "
+                            f"Vui lòng đăng nhập để tiếp tục trò chuyện.",
+                }
+            response = ask_rag(user_input, voice=voice)
+            request.session["guest_msg_count"] = guest_count + 1
+            return {"status": "success", "text": response}
+
+        if chat_id and get_chat_title(chat_id) == NOTIFICATION_CHAT_TITLE:
+            return {"status": "error", "text": f"⚠️ Không thể gửi tin nhắn trong đoạn chat '{NOTIFICATION_CHAT_TITLE}'."}
+
+        if chat_id and count_user_messages(chat_id) >= MAX_MESSAGES_PER_CHAT:
+            return {
+                "status": "limit",
+                "text": f"⚠️ Đoạn chat này đã đạt giới hạn {MAX_MESSAGES_PER_CHAT} câu hỏi. "
+                        f"Vui lòng tạo đoạn chat mới để tiếp tục.",
+            }
+
         save_message(chat_id, "user", user_input)
-        response = ask_rag(user_input)
+        response = ask_rag(user_input, voice=voice)
         save_message(chat_id, "assistant", response)
         return {"status": "success", "text": response}
     except Exception as e:
@@ -198,14 +272,30 @@ async def api_create_chat(request: Request):
     if not logged_in(request):
         return JSONResponse({"error": "Unauthorized"}, status_code=401)
     owner_role = 1 if is_teacher(request) else 0
-    chat_id = create_chat(request.session["user_id"], owner_role)
+    user_id    = request.session["user_id"]
+
+    existing = [c for c in get_all_chats(user_id, owner_role) if c["title"] != NOTIFICATION_CHAT_TITLE]
+    if len(existing) >= MAX_CHATS_PER_USER:
+        return JSONResponse({
+            "status":  "error",
+            "message": f"Bạn đã đạt giới hạn {MAX_CHATS_PER_USER} đoạn chat. "
+                       f"Vui lòng xoá một đoạn chat cũ trước khi tạo mới.",
+            "chats":   existing,
+        }, status_code=409)
+
+    chat_id = create_chat(user_id, owner_role)
     return {"chat_id": chat_id}
 
 
 @app.post("/rename_chat")
 async def api_rename_chat(request: Request):
     data = await request.json()
-    rename_chat(data["chat_id"], data["title"])
+    ok = rename_chat(data["chat_id"], data["title"])
+    if not ok:
+        return JSONResponse({
+            "status":  "error",
+            "message": f"Không thể đặt tên chat trùng với '{NOTIFICATION_CHAT_TITLE}'.",
+        }, status_code=400)
     return {"status": "ok"}
 
 
@@ -234,6 +324,8 @@ async def import_law(
     so_ky_hieu: str = Form(""),
     loai_van_ban: str = Form(""),
     nguon_thu_thap: str = Form(""),
+    primary_keyword_ids: str = Form(""),
+    secondary_keyword_ids: str = Form(""),
     pdf_file: UploadFile = File(None),
 ):
     if not logged_in(request) or not is_teacher(request):
@@ -249,6 +341,14 @@ async def import_law(
             "message": "Vui lòng tải lên file PDF hoặc DOCX và điền đầy đủ tất cả 3 trường."
         }, status_code=400)
 
+    primary_ids   = _parse_keyword_ids(primary_keyword_ids)
+    secondary_ids = _parse_keyword_ids(secondary_keyword_ids)
+    if not primary_ids:
+        return JSONResponse({
+            "status": "error",
+            "message": "Vui lòng chọn ít nhất 1 Từ khóa chính."
+        }, status_code=400)
+
     filename_lower = (pdf_file.filename or "").lower()
     if not (filename_lower.endswith(".pdf") or filename_lower.endswith(".docx")):
         return JSONResponse({"status": "error", "message": "Chỉ chấp nhận file PDF hoặc DOCX."}, status_code=400)
@@ -262,6 +362,7 @@ async def import_law(
         f.write(content)
 
     teacher_id = request.session["user_id"]
+    importer   = request.session.get("user_name") or "admin1"
 
     background_tasks.add_task(
         run_import,
@@ -272,6 +373,9 @@ async def import_law(
         nguon_thu_thap=nguon_thu_thap,
         student_id=teacher_id,
         db_conn_factory=get_conn,
+        importer=importer,
+        primary_keyword_ids=primary_ids,
+        secondary_keyword_ids=secondary_ids,
     )
 
     return {"status": "ok", "job_id": job_id, "message": "Đã nhận file. Đang xử lý nền…"}
@@ -283,9 +387,23 @@ async def import_status(job_id: str):
     return job if job else {"status": "unknown"}
 
 
+@app.get("/list_active_keywords")
+async def list_active_keywords_route(request: Request):
+    if not logged_in(request) or not is_teacher(request):
+        return JSONResponse({"status": "error", "message": "Unauthorized"}, status_code=403)
+    return get_active_keywords()
+
+
+@app.get("/list_active_priority_keywords")
+async def list_active_priority_keywords_route(request: Request):
+    if not logged_in(request) or not is_teacher(request):
+        return JSONResponse({"status": "error", "message": "Unauthorized"}, status_code=403)
+    return get_active_priority_keywords()
+
+
 @app.get("/list_law_sources")
 async def list_law_sources_route(request: Request):
-    if not logged_in(request) or not is_admin(request):
+    if not logged_in(request) or not is_teacher(request):
         return JSONResponse({"status": "error", "message": "Unauthorized"}, status_code=403)
     return list_indexed_sources()
 
@@ -309,11 +427,181 @@ async def delete_law_source_route(request: Request):
     return {"status": "ok", "deleted": deleted}
 
 
+# Law only — Dataset/Scenario are test/enrichment data (auto-tagged secondary
+# keywords at import time, see import_dataset_engine.py/import_scenario_engine.py)
+# and deliberately have no "Xem thông tin" view/edit capability in Manage Law.
+_SOURCE_INFO_FNS = {
+    "law": (get_law_source_info, "văn bản"),
+}
+
+
+@app.get("/get_source_info")
+async def get_source_info_route(request: Request, source_type: str = Query(...), source_key: str = Query(...)):
+    if not logged_in(request) or not is_teacher(request):
+        return JSONResponse({"status": "error", "message": "Unauthorized"}, status_code=403)
+
+    entry = _SOURCE_INFO_FNS.get(source_type)
+    if not entry:
+        return JSONResponse({"status": "error", "message": "source_type không hợp lệ."}, status_code=400)
+    info_fn, label = entry
+
+    info = info_fn(source_key)
+    if not info:
+        return JSONResponse(
+            {"status": "error", "message": f"Không tìm thấy {label} '{source_key}' trong ChromaDB."},
+            status_code=404,
+        )
+    info["source_type"] = source_type
+    info["source_key"]  = source_key
+    info["keywords"]    = get_source_keywords(source_type, source_key)
+    return info
+
+
+
+# "law_article" tags one specific Điều within a document (source_key encodes
+# both: "<so_ky_hieu>#<article_number>") — added 2026-07-29 (user request) so
+# primary/secondary tagging can discriminate between sibling articles of the
+# same document, which document-wide tagging structurally cannot (a
+# document-wide boost lifts every article in it equally). Not in
+# _SOURCE_INFO_FNS since there's no separate "Xem thông tin" chunk-count view
+# for a single article — it's only ever written via /update_source_keywords
+# and read back via /get_article_keywords.
+_UPDATABLE_SOURCE_TYPES = set(_SOURCE_INFO_FNS) | {"law_article"}
+
+
+@app.get("/get_article_keywords")
+async def get_article_keywords_route(request: Request, source_key: str = Query(...), article_number: str = Query(...)):
+    if not logged_in(request) or not is_teacher(request):
+        return JSONResponse({"status": "error", "message": "Unauthorized"}, status_code=403)
+    article_number = article_number.strip()
+    if not article_number:
+        return JSONResponse({"status": "error", "message": "Thiếu article_number"}, status_code=400)
+    return get_source_keywords("law_article", f"{source_key}#{article_number}")
+
+
+@app.get("/list_tagged_articles")
+async def list_tagged_articles_route(request: Request, source_key: str = Query(...)):
+    if not logged_in(request) or not is_teacher(request):
+        return JSONResponse({"status": "error", "message": "Unauthorized"}, status_code=403)
+    return {"articles": get_tagged_articles(source_key)}
+
+
+@app.get("/list_source_articles")
+async def list_source_articles_route(request: Request, source_key: str = Query(...)):
+    if not logged_in(request) or not is_teacher(request):
+        return JSONResponse({"status": "error", "message": "Unauthorized"}, status_code=403)
+    return {"articles": get_law_source_articles(source_key)}
+
+
+@app.post("/update_source_keywords")
+async def update_source_keywords_route(request: Request):
+    if not logged_in(request) or not is_teacher(request):
+        return JSONResponse({"status": "error", "message": "Unauthorized"}, status_code=403)
+
+    data        = await request.json()
+    source_type = (data.get("source_type") or "").strip()
+    source_key  = (data.get("source_key") or "").strip()
+    primary     = data.get("primary_keyword_ids") or []
+    secondary   = data.get("secondary_keyword_ids") or []
+    priority    = data.get("priority_keyword_ids") or []
+
+    if source_type not in _UPDATABLE_SOURCE_TYPES:
+        return JSONResponse({"status": "error", "message": "source_type không hợp lệ."}, status_code=400)
+    if not source_key:
+        return JSONResponse({"status": "error", "message": "Thiếu source_key"}, status_code=400)
+    # Primary/secondary are no longer required at the whole-document level —
+    # document-level authority is now expressed via priority instead
+    # (2026-07-29, user request: primary/secondary reserved for article-level
+    # tagging only, which is genuinely optional per document; penalty
+    # retired the same day — see database.database's KEYWORD_STATUS_* comment).
+
+    try:
+        primary_ids   = [int(x) for x in primary]
+        secondary_ids = [int(x) for x in secondary]
+        priority_ids  = [int(x) for x in priority]
+    except (TypeError, ValueError):
+        return JSONResponse({"status": "error", "message": "ID từ khóa không hợp lệ."}, status_code=400)
+
+    set_source_keywords(source_type, source_key, primary_ids, secondary_ids, priority_ids)
+    return {"status": "ok"}
+
+
+# ── Keyword management (admin adds/toggles, teacher+admin read for pickers) ────
+@app.get("/list_keywords")
+async def list_keywords_route(request: Request):
+    if not logged_in(request) or not is_teacher(request):
+        return JSONResponse({"status": "error", "message": "Unauthorized"}, status_code=403)
+    return get_all_keywords()
+
+
+@app.post("/add_keyword")
+async def add_keyword_route(request: Request):
+    if not logged_in(request) or not is_admin(request):
+        return JSONResponse({"status": "error", "message": "Unauthorized"}, status_code=403)
+
+    data = await request.json()
+    name = (data.get("name") or "").strip()
+    kind = data.get("kind") or "scoring"  # scoring|oos|priority
+    if not name:
+        return JSONResponse({"status": "error", "message": "Vui lòng nhập tên từ khóa."}, status_code=400)
+    if len(name) > MAX_KEYWORD_NAME_LENGTH:
+        return JSONResponse(
+            {"status": "error", "message": f"Tên từ khóa tối đa {MAX_KEYWORD_NAME_LENGTH} ký tự (hiện tại {len(name)})."},
+            status_code=400,
+        )
+    if kind not in ("scoring", "oos", "priority"):
+        return JSONResponse({"status": "error", "message": "Loại từ khóa không hợp lệ."}, status_code=400)
+
+    keyword_id = create_keyword(name, kind=kind)
+    if keyword_id is None:
+        return JSONResponse({"status": "error", "message": f"Từ khóa '{name}' đã tồn tại."}, status_code=400)
+    return {"status": "ok", "id": keyword_id}
+
+
+@app.post("/toggle_keyword_status")
+async def toggle_keyword_status_route(request: Request):
+    if not logged_in(request) or not is_admin(request):
+        return JSONResponse({"status": "error", "message": "Unauthorized"}, status_code=403)
+
+    data       = await request.json()
+    keyword_id = data.get("id")
+    status     = data.get("status")
+    # 0/1 = scoring keyword active/disabled, 2/3 = out-of-scope keyword
+    # active/disabled, 8/9 = priority active/disabled — see
+    # database.database's KEYWORD_STATUS_* constants (4-7 retired 2026-07-29,
+    # formerly penalty — intentionally rejected here, not just unused, so a
+    # stray old request can't silently resurrect the mechanism).
+    if keyword_id is None or status not in (0, 1, 2, 3, 8, 9):
+        return JSONResponse({"status": "error", "message": "Thiếu tham số"}, status_code=400)
+
+    set_keyword_status(keyword_id, status)
+    return {"status": "ok"}
+
+
 @app.get("/list_dataset_sources")
 async def list_dataset_sources_route(request: Request):
     if not logged_in(request) or not is_admin(request):
         return JSONResponse({"status": "error", "message": "Unauthorized"}, status_code=403)
-    return list_dataset_sources()
+    # Uploaded .xlsx files are tracked in chat.db (dataset_file table). Only
+    # their KB_Articles / KB_Articles_Updated / Legal_Update_2025 sheets get
+    # embedded into ChromaDB (curated reference content); Dataset_*/Demo_*
+    # sheets (the test Q&A pairs) never do — see engine/import_dataset_engine.py.
+    # Merge chat.db tracking with real Chroma chunk counts for display.
+    chroma  = {s["name"]: s for s in list_dataset_sources()}
+    tracked = {f["filename"]: f for f in get_all_dataset_files()}
+
+    result = []
+    for name in set(chroma) | set(tracked):
+        c  = chroma.get(name)
+        db = tracked.get(name)
+        result.append({
+            "name": name,
+            "chunk_count": c["chunk_count"] if c else 0,
+            "importer": (db["importer"] if db else None) or (c["importer"] if c else None) or "—",
+            "uploaded_at": db["uploaded_at"] if db else None,
+        })
+    result.sort(key=lambda x: x["name"])
+    return result
 
 
 @app.post("/delete_dataset_source")
@@ -326,13 +614,26 @@ async def delete_dataset_source_route(request: Request):
     if not source_name:
         return JSONResponse({"status": "error", "message": "Thiếu name"}, status_code=400)
 
-    deleted = delete_dataset_source(source_name)
-    if deleted == 0:
+    tracked_names = {f["filename"] for f in get_all_dataset_files()}
+    chroma_names  = {s["name"] for s in list_dataset_sources()}
+    if source_name not in tracked_names and source_name not in chroma_names:
         return JSONResponse(
-            {"status": "error", "message": f"Không tìm thấy dataset '{source_name}' trong ChromaDB."},
+            {"status": "error", "message": f"Không tìm thấy dataset '{source_name}'."},
             status_code=404,
         )
-    return {"status": "ok", "deleted": deleted}
+
+    delete_dataset_file(source_name)
+    delete_dataset_source(source_name)
+    # Also remove the physical file so it stops showing up in the Quick/Full
+    # Evaluation dataset dropdown (engine.evaluate_engine.list_available_datasets
+    # scans Dataset/ directly from disk).
+    file_path = os.path.join(BASE_DIR, "Dataset", source_name)
+    try:
+        if os.path.exists(file_path):
+            os.remove(file_path)
+    except Exception:
+        pass
+    return {"status": "ok"}
 
 
 @app.get("/list_scenario_sources")
@@ -361,6 +662,32 @@ async def delete_scenario_source_route(request: Request):
     return {"status": "ok", "deleted": deleted}
 
 
+# ── Regression tests (admin, Manage Law → "Kiểm thử hồi quy" tab) ───────────────
+@app.post("/run_regression_tests")
+async def run_regression_tests_route(request: Request, background_tasks: BackgroundTasks):
+    if not logged_in(request) or not is_admin(request):
+        return JSONResponse({"status": "error", "message": "Unauthorized"}, status_code=403)
+
+    job_id = str(uuid.uuid4())
+    background_tasks.add_task(run_regression_tests, job_id=job_id)
+    return {"status": "ok", "job_id": job_id}
+
+
+@app.get("/regression_test_status/{job_id}")
+async def regression_test_status_route(request: Request, job_id: str):
+    if not logged_in(request) or not is_admin(request):
+        return JSONResponse({"status": "error", "message": "Unauthorized"}, status_code=403)
+    job = get_regression_job(job_id)
+    return job if job else {"status": "unknown"}
+
+
+@app.get("/latest_regression_results")
+async def latest_regression_results_route(request: Request):
+    if not logged_in(request) or not is_admin(request):
+        return JSONResponse({"status": "error", "message": "Unauthorized"}, status_code=403)
+    return get_latest_regression_results()
+
+
 # ── Import scenario (DOCX case-study set) ───────────────────────────────────────
 @app.post("/import_scenario")
 async def import_scenario_route(
@@ -381,6 +708,7 @@ async def import_scenario_route(
         f.write(content)
 
     teacher_id = request.session["user_id"]
+    importer   = request.session.get("user_name") or "admin1"
 
     background_tasks.add_task(
         run_import_scenario,
@@ -388,6 +716,7 @@ async def import_scenario_route(
         file_path=file_path,
         student_id=teacher_id,
         original_filename=docx_file.filename,
+        importer=importer,
     )
     return {"status": "ok", "job_id": job_id, "message": "Đã nhận file. Đang xử lý nền…"}
 
@@ -443,11 +772,14 @@ async def import_dataset_route(
     with open(file_path, "wb") as f:
         f.write(content)
 
+    importer = request.session.get("user_name") or "admin1"
+
     background_tasks.add_task(
         run_import_dataset,
         job_id=job_id,
         file_path=file_path,
         original_filename=dataset_file.filename,
+        importer=importer,
     )
     return {"status": "ok", "job_id": job_id, "message": "Đang xử lý dataset…"}
 
@@ -497,7 +829,7 @@ async def evaluate_route(
 
     if mode not in ("auto", "llm"):
         mode = "auto"
-    if split not in ("demo", "all", "test"):
+    if split not in ("demo", "all", "test", "random"):
         split = "demo"
 
     job_id = str(uuid.uuid4())
@@ -526,6 +858,46 @@ async def download_eval_result_route(request: Request, filename: str):
 
     safe_name = os.path.basename(filename)
     if not re.match(r'^eval_results_.*\.xlsx$', safe_name):
+        return JSONResponse({"status": "error", "message": "Tên file không hợp lệ"}, status_code=400)
+
+    file_path = os.path.join(BASE_DIR, safe_name)
+    if not os.path.exists(file_path):
+        return JSONResponse({"status": "error", "message": "Không tìm thấy file kết quả"}, status_code=404)
+
+    return StreamingResponse(
+        open(file_path, "rb"),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={safe_name}"},
+    )
+
+
+@app.get("/download_low_score_result/{filename}")
+async def download_low_score_result_route(request: Request, filename: str):
+    if not logged_in(request) or not is_teacher(request):
+        return JSONResponse({"status": "error", "message": "Unauthorized"}, status_code=403)
+
+    safe_name = os.path.basename(filename)
+    if not re.match(r'^eval_low_score_.*\.xlsx$', safe_name):
+        return JSONResponse({"status": "error", "message": "Tên file không hợp lệ"}, status_code=400)
+
+    file_path = os.path.join(BASE_DIR, safe_name)
+    if not os.path.exists(file_path):
+        return JSONResponse({"status": "error", "message": "Không tìm thấy file kết quả"}, status_code=404)
+
+    return StreamingResponse(
+        open(file_path, "rb"),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={safe_name}"},
+    )
+
+
+@app.get("/download_connection_errors/{filename}")
+async def download_connection_errors_route(request: Request, filename: str):
+    if not logged_in(request) or not is_teacher(request):
+        return JSONResponse({"status": "error", "message": "Unauthorized"}, status_code=403)
+
+    safe_name = os.path.basename(filename)
+    if not re.match(r'^eval_connection_errors_.*\.xlsx$', safe_name):
         return JSONResponse({"status": "error", "message": "Tên file không hợp lệ"}, status_code=400)
 
     file_path = os.path.join(BASE_DIR, safe_name)

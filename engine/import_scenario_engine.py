@@ -41,8 +41,6 @@ BASE_DIR     = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # en
 DB_PATH      = os.path.join(BASE_DIR, "chroma_db")
 INSERT_BATCH = 32
 
-CHAT_TITLE = "Nhập văn bản tình huống"
-
 # ── Job registry ─────────────────────────────────────────────────────────────
 _jobs: dict = {}
 _jobs_lock = threading.Lock()
@@ -171,7 +169,9 @@ def parse_scenario_docx(path: str) -> list:
     return [c for c in cases if c["case_id"] and c["scenario"]]
 
 
-def _build_case_doc(case: dict, source_label: str) -> Document:
+def _build_case_doc(case: dict, source_label: str, importer: str) -> Document:
+    from engine.rag_engine import detect_entity_type
+
     lines = [
         f"Tình huống pháp lý: {case['topic']}",
         f"Mô tả: {case['scenario']}",
@@ -195,26 +195,37 @@ def _build_case_doc(case: dict, source_label: str) -> Document:
         lines.append("Câu hỏi tương đương: " + " | ".join(case["alternative_queries"]))
     content = "\n".join(lines)
 
-    return Document(
-        page_content=content,
-        metadata={
-            "case_id":            case["case_id"],
-            "topic":              case["topic"],
-            "difficulty":         case["difficulty"],
-            "doc_type":           "scenario_qa",
-            "import_source":      "scenario",
-            "nguon_thu_thap":     source_label,
-            "legal_basis":        "; ".join(case["legal_basis"]),
-            "retrieval_keywords": "; ".join(case["keywords"]),
-            "char_count":         len(content),
-        },
-    )
+    meta = {
+        "case_id":            case["case_id"],
+        "topic":              case["topic"],
+        "difficulty":         case["difficulty"],
+        "doc_type":           "scenario_qa",
+        "import_source":      "scenario",
+        "nguon_thu_thap":     source_label,
+        "legal_basis":        "; ".join(case["legal_basis"]),
+        "retrieval_keywords": "; ".join(case["keywords"]),
+        "char_count":         len(content),
+        "importer":           importer,
+    }
+    entity_type = detect_entity_type(f"{case['topic']} {content}")
+    if entity_type:
+        meta["entity_type"] = entity_type
+
+    return Document(page_content=content, metadata=meta)
 
 
 # ── Main background job ───────────────────────────────────────────────────────
-def run_import_scenario(job_id: str, file_path: str, student_id: int, original_filename: str = None):
+def run_import_scenario(job_id: str, file_path: str, student_id: int,
+                        original_filename: str = None, importer: str = "admin1"):
     """Parse a scenario DOCX and add one chunk per case to ChromaDB (no wipe,
-    skip case_ids already indexed)."""
+    skip case_ids already indexed).
+
+    No manual keyword picker here (unlike Law import) — scenario cases are
+    test/enrichment data, not the authoritative source, so they never get the
+    primary-keyword scoring buff. Instead every unique phrase from each
+    case's own "5. Dữ liệu hỗ trợ truy xuất chatbot" → "Từ khóa:" line is
+    auto-tagged as a *secondary* keyword (see the end of the try-block below).
+    """
     _set_job(job_id, status="running", message="Đang đọc file DOCX…")
     source_label = os.path.splitext(os.path.basename(original_filename or file_path))[0]
 
@@ -231,9 +242,13 @@ def run_import_scenario(job_id: str, file_path: str, student_id: int, original_f
 
         _set_job(job_id, message=f"Đã đọc {len(cases)} tình huống — đang kiểm tra trùng lặp…")
 
-        docs = [_build_case_doc(c, source_label) for c in cases]
+        docs = [_build_case_doc(c, source_label, importer) for c in cases]
 
-        embedding = HuggingFaceEmbeddings(model_name="BAAI/bge-small-en-v1.5")
+        embedding = HuggingFaceEmbeddings(
+            model_name="BAAI/bge-m3",
+            model_kwargs={"device": "cpu"},
+            encode_kwargs={"normalize_embeddings": True},
+        )
         vs        = Chroma(persist_directory=DB_PATH, embedding_function=embedding)
 
         existing         = vs.get(include=["metadatas"])
@@ -259,6 +274,21 @@ def run_import_scenario(job_id: str, file_path: str, student_id: int, original_f
         from engine.rag_engine import refresh_citation_sources
         refresh_citation_sources()
 
+        # Auto-tag this uploaded file with every unique "Từ khóa:" phrase
+        # found across its own cases (see database.database.keyword /
+        # source_keyword) — keyed by source_label since that's how
+        # list_scenario_sources() groups cases from this import type (via
+        # nguon_thu_thap). Secondary only — see run_import_scenario docstring.
+        from database.database import get_or_create_keyword, set_source_keywords
+        unique_phrases = set()
+        for c in cases:
+            for phrase in c.get("keywords") or []:
+                phrase = phrase.strip()
+                if phrase:
+                    unique_phrases.add(phrase)
+        secondary_ids = [get_or_create_keyword(p) for p in unique_phrases]
+        set_source_keywords("scenario", source_label, [], secondary_ids)
+
         _set_job(job_id, status="done", message=result_msg)
 
     except Exception as e:
@@ -269,7 +299,7 @@ def run_import_scenario(job_id: str, file_path: str, student_id: int, original_f
     finally:
         try:
             msg = get_scenario_job(job_id).get("message", "Xử lý hoàn tất.")
-            upsert_import_chat(student_id, msg, title=CHAT_TITLE)
+            upsert_import_chat(student_id, msg)
         except Exception:
             pass
         try:

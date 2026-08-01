@@ -25,11 +25,121 @@ body {
     flex-direction: column;
     z-index: 100;     /* ensures sidebar is always clickable */
     position: relative;
+    overflow: hidden;
+    transition: width .2s ease, min-width .2s ease;
+}
+
+/* Collapse state lives on .layout (not .sidebar itself) so the floating
+   toggle button — a sibling of .sidebar, shown only while collapsed — can be
+   driven by the same class without a `:has()` dependency. */
+.layout.sidebar-collapsed .sidebar {
+    width: 0;
+    min-width: 0;
+    border: none;
 }
 
 .sidebar-header {
-    padding: 15px;
+    /* Extra top padding reserves room for the fixed icon toggle button
+       (top:12px, ~38px) that sits over this corner while the sidebar is
+       open, so the brand text/"+ Đoạn chat mới" don't render underneath it. */
+    padding: 62px 15px 15px;
     border-bottom: 1px solid #3f3f46;
+}
+
+/* Plain text, styled like the header's "Chat Assistant" title — only lives
+   inside the (open) sidebar, not fixed/floating. */
+/* Fixed top-left, always visible — same position whether the sidebar is
+   open or collapsed, and for guests too (no icon precedes it then, see
+   --no-icon). Solid pill background (not just colored text) so white text
+   stays readable regardless of what's behind it (dark sidebar vs. white
+   page content) without needing to flip colors per state. */
+/* Wraps the label + role badge as one unit, fixed top-left, so the badge
+   always sits right next to the label instead of off in the header. Slides
+   along with the sidebar's own width transition (same duration/easing as
+   .sidebar's "transition: width .2s ease") so it moves in sync rather than
+   teleporting between positions. */
+.floating-brand-group {
+    display: flex;
+    position: fixed;
+    top: 12px;
+    left: 62px;
+    z-index: 300;
+    align-items: center;
+    gap: 10px;
+    transition: left .2s ease;
+}
+
+/* Sidebar off (collapsed): stay right next to the fixed toggle icon.
+   Sidebar on (open): slide to sit just past the now-open sidebar's edge,
+   near the sidebar itself rather than the toggle button. */
+.layout.sidebar-collapsed .floating-brand-group {
+    left: 62px;
+}
+
+.layout:not(.sidebar-collapsed) .floating-brand-group {
+    left: 274px;
+}
+
+/* Guests: no icon precedes the group, and their sidebar is permanently
+   collapsed (no toggle to open it), so this position never needs to slide. */
+.floating-brand-group--no-icon {
+    left: 14px;
+}
+
+.floating-brand-label {
+    display: flex;
+    height: 38px;
+    align-items: center;
+    padding: 0 16px;
+    border-radius: 999px;
+    background: #6200EA;
+    font-size: 25px;
+    font-weight: 700;
+    color: white;
+    white-space: nowrap;
+}
+
+/* ── Sidebar toggle — icon-only, always visible at a fixed screen position
+   (top-left), regardless of open/collapsed state. Logged-in users only. */
+.floating-toggle {
+    display: flex;
+    position: fixed;
+    top: 12px;
+    left: 14px;
+    z-index: 300;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.35);
+    font-size: 17px;
+    cursor: pointer;
+    transition: background .15s, color .15s;
+}
+
+/* Sidebar collapsed: button sits over the white main content — solid purple
+   pops there. Sidebar open: button sits over the dark sidebar (#202123) —
+   inverted to white-on-purple-outline so it still pops instead of blending
+   into the dark background. */
+.layout.sidebar-collapsed .floating-toggle {
+    background: #6200EA;
+    border: 1.5px solid white;
+    color: white;
+}
+
+.layout.sidebar-collapsed .floating-toggle:hover {
+    background: #7A2BF0;
+}
+
+.layout:not(.sidebar-collapsed) .floating-toggle {
+    background: black;
+    border: 1.5px solid #6200EA;
+    color: white;
+}
+
+.layout:not(.sidebar-collapsed) .floating-toggle:hover {
+    background: #F0E6FE;
 }
 
 .new-chat {
@@ -126,9 +236,168 @@ body {
 .header {
     background-color: #6200EA;
     color: white;
-    padding: 16px;
-    text-align: center;
-    font-size: 24px;
+    /* Explicit height (not padding-driven) because header-left/header-right
+       are now empty — their content moved into the fixed-position groups —
+       and header-center was pulled out of the grid entirely (position:fixed
+       for viewport centering), so nothing was left to size the row and the
+       header collapsed down to near-zero height. Matches .header-center's
+       height so both line up. */
+    height: 65px;
+    /* Left padding reserves room for the fixed toggle icon + sliding
+       "⚖️ RAG Legal Assistant" pill so header-left content never sits under
+       it — the exact amount needed changes as the label slides (see the
+       two state rules below), animated with the same timing so the header
+       and the label move in sync. Right padding reserves room for the fixed
+       voice-switch + login/logout group (.floating-right-group), which
+       doesn't move, so a single static value is enough. Grid (not flex) so
+       the center zone stays truly centered regardless of how much content
+       the left/right zones hold. */
+    padding: 0 300px 0 380px;
+    font-size: 21px;
+    font-weight: 600;
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    gap: 16px;
+    overflow-x: auto;
+    transition: padding-left .2s ease;
+}
+
+.layout.sidebar-collapsed .header {
+    padding-left: 380px;
+}
+
+.layout:not(.sidebar-collapsed) .header {
+    padding-left: 600px;
+}
+
+.header-left,
+.header-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.header-left {
+    justify-content: flex-start;
+}
+
+/* Locked to the viewport's horizontal center, not the grid's "auto" column —
+   position:fixed removes it from the header's grid flow entirely, so it
+   never shifts when the header's padding/left-column content changes (e.g.
+   the sidebar toggling open/closed). */
+.header-center {
+    position: fixed;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    height: 60px;
+    display: flex;
+    align-items: center;
+    z-index: 250;
+    font-size: 25px;
+    font-weight: 600;
+    color: white;
+    white-space: nowrap;
+    pointer-events: none;
+}
+
+.header-right {
+    justify-content: flex-end;
+}
+
+.header-btn {
+    background: rgba(255,255,255,0.12);
+    border: none;
+    color: white;
+    padding: 9px 18px;
+    border-radius: 999px;
+    cursor: pointer;
+    font-size: 20px;
+    font-weight: 500;
+    white-space: nowrap;
+    transition: background .18s;
+}
+
+.header-btn:hover {
+    background: rgba(255,255,255,0.24);
+}
+
+/* Session action (login/logout) gets a white border so it visually stands
+   out from the plain translucent buttons next to it. */
+#loginBtn, #logoutBtn {
+    border: 1.5px solid rgba(255,255,255,0.9);
+    /* ~1.3x the base .header-btn size (padding 9px 18px / font 14px) */
+    padding: 12px 23px;
+    font-size: 18px;
+}
+
+/* Mirrors .floating-brand-group on the opposite corner — fixed top-right,
+   holding the voice switch + login/logout, same treatment as the top-left
+   ⚖️ RAG Legal Assistant / role badge group. */
+.floating-right-group {
+    display: flex;
+    position: fixed;
+    top: 12px;
+    right: 14px;
+    z-index: 300;
+    align-items: center;
+    gap: 14px;
+}
+
+/* ── Voice toggle — iOS-style switch instead of a plain button ── */
+.voice-switch {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    cursor: pointer;
+    user-select: none;
+    background: cornsilk;
+    border: 1.5px solid blue;
+    border-radius: 999px;
+    padding: 8px 16px;
+}
+
+.voice-switch input {
+    display: none;
+}
+
+.voice-switch-track {
+    position: relative;
+    flex-shrink: 0;
+    width: 40px;
+    height: 22px;
+    background: #1565C0;
+    border-radius: 999px;
+    transition: background .2s;
+}
+
+.voice-switch-knob {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 18px;
+    height: 18px;
+    background: white;
+    border-radius: 50%;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+    transition: left .2s;
+}
+
+.voice-switch input:checked ~ .voice-switch-track {
+    background: #34C759;
+}
+
+.voice-switch input:checked ~ .voice-switch-track .voice-switch-knob {
+    left: 20px;
+}
+
+.voice-switch-label {
+    font-size: 20px;
+    font-weight: 500;
+    color: #1565C0;
+    font-weight: bolder;
+    white-space: nowrap;
 }
 
 /* Wraps chatbox + input */
@@ -136,20 +405,28 @@ body {
     flex: 1;
     display: flex;
     flex-direction: column;
+    justify-content: center;
     width: 100%;
     margin: 0;
     background-color: white;
     min-height: 0;
 }
 
+.container.is-chatting {
+    justify-content: flex-start;
+}
+
 /* ── Welcome screen ─────────────────────────────── */
+/* Not flex:1 anymore — sits at natural height so it + the input bar right
+   below it form one block that .container centers vertically as a group
+   (hero-style, input bar following the greeting instead of pinned to the
+   page bottom). Hidden entirely once chatting (rule below). */
 #welcome-screen {
-    flex: 1;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding-bottom: 40px;
+    padding-bottom: 24px;
 }
 
 .welcome-title {
@@ -165,6 +442,16 @@ body {
     color: #757575;
     margin: 0 0 28px 0;
     text-align: center;
+}
+
+/* Hidden by default (display:none inline) — only shown for guests, in which
+   case it replaces part of the subtitle's bottom margin so spacing above
+   the suggestion chips doesn't just keep growing. */
+#guestNotice {
+    font-size: 15px;
+    color: #757575;
+    text-align: center;
+    margin: -16px 0 20px 0;
 }
 
 .suggestion-chips {
@@ -286,6 +573,15 @@ body {
     align-items: center;
 }
 
+.container:not(.is-chatting) .input-area {
+    max-width: 640px;
+    width: 90%;
+    margin: 0 auto;
+    border-top: none;
+    background: transparent;
+    padding: 0;
+}
+
 .input-area input {
     flex: 1;
     padding: 10px;
@@ -293,6 +589,13 @@ body {
     border-radius: 20px;
     margin-right: 10px;
     transition: border-color 0.3s;
+}
+
+.container:not(.is-chatting) .input-area input {
+    padding: 16px 20px;
+    border-radius: 999px;
+    font-size: 15px;
+    box-shadow: 0 4px 18px rgba(0,0,0,0.08);
 }
 
 .input-area input:focus {
@@ -311,12 +614,107 @@ body {
     align-items: center;
 }
 
+.container:not(.is-chatting) .input-area button {
+    padding: 14px 22px;
+    border-radius: 999px;
+}
+
 .input-area button:hover {
     background-color: #3700B3;
 }
 
 .input-area .material-icons {
     margin-right: 5px;
+}
+
+.input-area input:disabled,
+.input-area button:disabled {
+    opacity: .55;
+    cursor: not-allowed;
+}
+
+/* ---------------------------------------------------
+   CHAT LIMIT PICKER (shown when the 5-chat cap is hit)
+--------------------------------------------------- */
+.chat-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 500;
+}
+
+.chat-modal {
+    background: #2d2d2d;
+    color: white;
+    border-radius: 10px;
+    padding: 20px;
+    width: 360px;
+    max-width: 90vw;
+    max-height: 80vh;
+    overflow-y: auto;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.35);
+}
+
+.chat-modal h3 {
+    font-size: 16px;
+    margin-bottom: 6px;
+}
+
+.chat-modal p {
+    font-size: 13px;
+    color: #cfcfcf;
+    margin-bottom: 14px;
+}
+
+.chat-modal-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 10px;
+    background: #343541;
+    border-radius: 6px;
+    margin-bottom: 8px;
+}
+
+.chat-modal-row span {
+    font-size: 13px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 240px;
+}
+
+.chat-modal-row button {
+    background: #D63B3B;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 5px 10px;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.chat-modal-row button:hover {
+    background: #b93030;
+}
+
+.chat-modal-close {
+    display: block;
+    margin: 10px auto 0;
+    background: none;
+    border: 1px solid #555;
+    color: #cfcfcf;
+    border-radius: 6px;
+    padding: 6px 14px;
+    font-size: 12.5px;
+    cursor: pointer;
+}
+
+.chat-modal-close:hover {
+    background: #3b3b3b;
 }
 
 /* ---------------------------------------------------
@@ -376,6 +774,15 @@ body {
 }
 .msg-conclusion .section-label { color: #e53935; }
 
+/* Căn cứ pháp lý — nền xanh lá nhạt, chữ label xanh lá đậm */
+.msg-legal-basis {
+    background: #f1f8f0;
+    border-left: 3px solid #2e7d32;
+    color: #212121;
+    font-size: 12.5px;
+}
+.msg-legal-basis .section-label { color: #2e7d32; }
+
 /* Phân tích — nền xanh nhạt, chữ label xanh */
 .msg-analysis {
     background: #e8f4fd;
@@ -395,24 +802,26 @@ body {
 
 /* ── Citation blocks ────────────────────────────── */
 .msg-citation {
-    font-size: 12px;
+    font-size: 13px;
+    line-height: 1.4;
     background: #e3f2fd;
     border-left: 3px solid #1976D2;
-    padding: 6px 10px;
+    padding: 5px 10px;
     border-radius: 4px;
     color: #1565C0;
-    margin-top: 8px;
+    margin-top: 6px;
     white-space: pre-wrap;
 }
 
 .msg-citation-secondary {
-    font-size: 11px;
+    font-size: 12px;
+    line-height: 1.4;
     background: #f3e5f5;
     border-left: 3px solid #9c27b0;
-    padding: 5px 10px;
+    padding: 4px 10px;
     border-radius: 4px;
     color: #6a1b9a;
-    margin-top: 4px;
+    margin-top: 3px;
     white-space: pre-wrap;
     max-height: 80px;
     overflow-y: auto;

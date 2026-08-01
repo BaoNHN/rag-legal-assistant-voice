@@ -177,8 +177,8 @@ def main():
         docs.append(Document(page_content=seg, metadata=meta))
 
     # ── Load ChromaDB ──
-    print("\nLoading embedding model (BAAI/bge-small-en-v1.5)...")
-    embedding = HuggingFaceEmbeddings(model_name="BAAI/bge-small-en-v1.5")
+    print("\nLoading embedding model (BAAI/bge-m3)...")
+    embedding = HuggingFaceEmbeddings(model_name="BAAI/bge-m3")
     vs        = Chroma(persist_directory=DB_PATH, embedding_function=embedding)
 
     # ── Dedup check ──

@@ -13,7 +13,7 @@
 #
 # USAGE:
 #   conda activate rag_env
-#   cd D:\hoc\project\rag-legal-assistant
+#   cd D:\hoc\project\rag-legal-assistant-master
 #   python -m database.reference_source
 
 import os
@@ -89,45 +89,14 @@ ARTICLES = [
             "doanh, ký hợp đồng hay xác lập giao dịch dân sự khác hay không."
         ),
     },
-    {
-        "so_ky_hieu": "01/2021/NĐ-CP",
-        "loai_van_ban": "Nghị định",
-        "nguon_thu_thap": "Nghị định 01/2021/NĐ-CP về đăng ký doanh nghiệp",
-        "article_number": "80",
-        "article_reference": "Điều 80",
-        "topic": "Quyền thành lập hộ kinh doanh và nghĩa vụ đăng ký hộ kinh doanh",
-        "doc_type": "household_business_eligibility_condition",
-        "retrieval_keywords": (
-            "hộ kinh doanh; quyền thành lập hộ kinh doanh; điều kiện thành lập hộ kinh doanh; "
-            "đủ 18 tuổi; năng lực hành vi dân sự đầy đủ; người chưa thành niên; công dân Việt Nam; "
-            "đăng ký hộ kinh doanh; chủ hộ kinh doanh"
-        ),
-        "source_url": "",
-        "content": (
-            "Điều 80. Quyền thành lập hộ kinh doanh và nghĩa vụ đăng ký hộ kinh doanh\n"
-            "1. Cá nhân, thành viên hộ gia đình là công dân Việt Nam có năng lực hành vi dân sự đầy đủ "
-            "theo quy định của Bộ luật Dân sự có quyền thành lập hộ kinh doanh theo quy định tại Chương "
-            "này, trừ các trường hợp sau đây:\n"
-            "a) Người chưa thành niên, người bị hạn chế năng lực hành vi dân sự; người bị mất năng lực "
-            "hành vi dân sự; người có khó khăn trong nhận thức, làm chủ hành vi;\n"
-            "b) Người đang bị truy cứu trách nhiệm hình sự, bị tạm giam, đang chấp hành hình phạt tù, "
-            "đang chấp hành biện pháp xử lý hành chính tại cơ sở cai nghiện bắt buộc, cơ sở giáo dục bắt "
-            "buộc hoặc đang bị Tòa án cấm đảm nhiệm chức vụ, cấm hành nghề hoặc làm công việc nhất định;\n"
-            "c) Các trường hợp khác theo quy định của pháp luật có liên quan.\n"
-            "2. Cá nhân, thành viên hộ gia đình quy định tại khoản 1 Điều này chỉ được đăng ký một hộ "
-            "kinh doanh trong phạm vi toàn quốc và được quyền góp vốn, mua cổ phần, mua phần vốn góp "
-            "trong doanh nghiệp với tư cách cá nhân.\n"
-            "3. Cá nhân, thành viên hộ gia đình đăng ký hộ kinh doanh không được đồng thời là chủ doanh "
-            "nghiệp tư nhân, thành viên hợp danh của công ty hợp danh trừ trường hợp được sự nhất trí "
-            "của các thành viên hợp danh còn lại.\n"
-            "Từ khóa: hộ kinh doanh; quyền thành lập hộ kinh doanh; điều kiện thành lập hộ kinh doanh; "
-            "đủ 18 tuổi; năng lực hành vi dân sự đầy đủ; người chưa thành niên; công dân Việt Nam; "
-            "đăng ký hộ kinh doanh; chủ hộ kinh doanh\n"
-            "Ghi chú: Điều kiện tiên quyết để xác định một cá nhân có được đăng ký hộ kinh doanh hay "
-            "không — phải đủ 18 tuổi VÀ có năng lực hành vi dân sự đầy đủ (không phải chỉ 'một phần' "
-            "như người từ đủ 15 đến chưa đủ 18 tuổi theo Điều 21 Bộ luật Dân sự 2015)."
-        ),
-    },
+    # NOTE: an entry citing Nghị định 01/2021/NĐ-CP Điều 80 (hộ kinh doanh
+    # eligibility) used to live here, patching a gap in the corpus. NĐ
+    # 01/2021 was replaced by NĐ 168/2025/NĐ-CP (Điều 124 khoản 2) effective
+    # 2026-07-25 — removed 2026-07-27 since the gap it patched is now covered
+    # by the full 168/2025/NĐ-CP bulk import (Điều 82 "Quyền thành lập hộ
+    # kinh doanh" + Điều 83 "Nghĩa vụ đăng ký hộ kinh doanh" via Import Law),
+    # so a hand-picked standalone entry would only duplicate/risk drifting
+    # from the real indexed text. Do not re-add an 01/2021-based entry.
 
     # ── Thêm entry mới ở đây (append) — không tạo file one-off khác. ──
 ]
@@ -153,8 +122,8 @@ def main():
         for a in ARTICLES
     ]
 
-    print("Loading embedding model (BAAI/bge-small-en-v1.5)...")
-    embedding = HuggingFaceEmbeddings(model_name="BAAI/bge-small-en-v1.5")
+    print("Loading embedding model (BAAI/bge-m3)...")
+    embedding = HuggingFaceEmbeddings(model_name="BAAI/bge-m3")
     vs = Chroma(persist_directory=DB_PATH, embedding_function=embedding)
 
     existing = vs.get(include=["metadatas"])

@@ -1,6 +1,22 @@
 # import_dataset_engine.py
-# Background worker: import an Excel dataset file into ChromaDB.
-# Auto-detects sheet format (150 vs 200-updated) from sheet names.
+# Background worker: import an Excel dataset file's CURATED KNOWLEDGE-BASE
+# content (KB_Articles / KB_Articles_Updated / Legal_Update_2025) into
+# ChromaDB, and register the file as an evaluation fixture.
+#
+# As of 2026-07-28 the Dataset_*/Demo_* Q&A sheets are PERMANENTLY excluded
+# from ChromaDB. A direct inspection of the live vectorstore confirmed a real
+# data-leakage risk: content from those sheets was retrievable during real
+# question answering — the exact question/answer pair used to test the
+# system could be retrieved back as "context" for that same question.
+#
+# KB_Articles/KB_Articles_Updated/Legal_Update_2025, by contrast, are
+# hand-curated legal-rule summaries — not question/answer test pairs — so
+# indexing them carries no such leakage risk, and removing them entirely
+# (an earlier, overly broad version of this fix) measurably hurt real answer
+# quality on several questions that depended on them. They are re-embedded
+# here; only the Q&A test sheets stay off ChromaDB, tracked in chat.db
+# (see database.database.dataset_file) purely for engine.evaluate_engine's
+# Quick/Full Evaluation to read directly from disk.
 
 import os
 import re
@@ -47,8 +63,7 @@ def _safe(val) -> str:
 def _persist_uploaded_dataset(tmp_path: str, original_filename: str = None) -> str:
     """
     Moves the uploaded dataset .xlsx into DATASET_DIR (Dataset/) so it becomes
-    available for RAG evaluation (see evaluate_engine.list_available_datasets)
-    instead of being discarded once it's indexed into ChromaDB.
+    available for RAG evaluation (see evaluate_engine.list_available_datasets).
     Never overwrites an existing file — appends a timestamp on name clash.
     Returns the saved filename, or None if the move failed.
     """
@@ -83,11 +98,55 @@ def _parse_meta(meta_str: str) -> dict:
     return result
 
 
-# ── Sheet processors ──────────────────────────────────────────────────────────
-def _build_kb_docs(sheet_df: pd.DataFrame, sheet_name: str, source_file: str) -> list:
-    """Process KB_Articles or KB_Articles_Updated sheet."""
+# so_ky_hieu used to be hardcoded to the module-wide SO_KY_HIEU constant for
+# every row of KB_Articles_Updated/Legal_Update_2025, on the assumption the
+# whole sheet was about Luật Doanh nghiệp 2020 — but curated rows added after
+# the 168/2025/NĐ-CP decree (or referencing 67/VBHN-VPQH/76/2025/QH15) say so
+# explicitly in their own article_reference/legal_source text (e.g. "Điều 52
+# Nghị định 168/2025/NĐ-CP", "67/VBHN-VPQH 2025"), which the import silently
+# ignored. Found live 2026-07-30 (traced from ELU161/ELU170 retrieval bugs):
+# 18 chunks across both sheets were citing the wrong law/decree entirely.
+def _derive_so_ky_hieu(article_ref: str) -> str:
+    ref = (article_ref or "").lower()
+    if "168/2025" in ref or "nghị định 168" in ref:
+        return "168/2025/NĐ-CP"
+    if "67/vbhn-vpqh" in ref:
+        return "67/VBHN-VPQH"
+    if "76/2025/qh15" in ref:
+        return "76/2025/QH15"
+    return SO_KY_HIEU
+
+
+# Range-style rows (curated after the fact to cover several Điều at once, e.g.
+# "Điều 112-115 Nghị định 168/2025/NĐ-CP") store their range under an
+# "articles=" (plural) key in suggested_chunk_metadata, not "article=" —
+# looking up only the singular key silently missed these, falling through to
+# stripping every non-digit from article_reference instead, which concatenates
+# the article numbers with the decree/year digits into garbage like
+# "1121151682025" (found live 2026-07-30 alongside the so_ky_hieu bug above).
+# Whole-document references with no "Điều" at all (e.g. "Nghị định
+# 168/2025/NĐ-CP", "Luật 76/2025/QH15") correctly get "" here — they don't
+# name one specific article.
+def _derive_article_number(article_ref: str, chunk_meta: dict) -> str:
+    single = chunk_meta.get("article")
+    if single:
+        return single
+    ranged = chunk_meta.get("articles")
+    if ranged:
+        m = re.search(r"\d+", ranged)
+        if m:
+            return m.group(0)
+    m = re.search(r"Điều\s+(\d+)", article_ref or "", re.IGNORECASE)
+    return m.group(1) if m else ""
+
+
+# ── Sheet processors (KB / curated content only — never Dataset_*/Demo_*) ─────
+def _build_kb_docs(sheet_df: pd.DataFrame, sheet_name: str, source_file: str, importer: str) -> list:
+    """Process KB_Articles or KB_Articles_Updated sheet — curated legal-rule
+    summaries, not test Q&A pairs, so safe to index."""
+    from engine.rag_engine import detect_entity_type
+
     docs = []
-    nguon = f"Luật Doanh nghiệp 2020 - {sheet_name} dataset"
 
     for _, row in sheet_df.iterrows():
         article_ref = _safe(row.get('article_reference', ''))
@@ -103,8 +162,19 @@ def _build_kb_docs(sheet_df: pd.DataFrame, sheet_name: str, source_file: str) ->
 
         chunk_meta  = _parse_meta(meta_str)
         chapter     = chunk_meta.get('chapter', '')
-        article_num = chunk_meta.get('article', re.sub(r'[^\d]', '', article_ref))
+        # Explicit so_ky_hieu column (2026-07-30, alongside source_url — a
+        # different field, the citation URL, not the document identifier) is
+        # authoritative when the sheet provides one — falls back to text-
+        # derivation only for older-format sheets uploaded before this column
+        # existed, so those don't suddenly stop importing.
+        so_ky_hieu  = _safe(row.get('so_ky_hieu', '')) or _derive_so_ky_hieu(article_ref)
+        article_num = _derive_article_number(article_ref, chunk_meta)
         doc_type    = chunk_meta.get('type', '')
+        # nguon_thu_thap ("collection source") is the uploaded file itself —
+        # a synthesized "{so_ky_hieu} - {sheet_name} dataset" string used to
+        # duplicate so_ky_hieu and couldn't be traced back to which upload
+        # produced it.
+        nguon       = source_file
 
         parts = [f"{article_ref}. {topic}", f"Quy tắc pháp lý: {summary}"]
         if keywords:
@@ -113,33 +183,41 @@ def _build_kb_docs(sheet_df: pd.DataFrame, sheet_name: str, source_file: str) ->
             parts.append(f"Ghi chú: {note}")
         content = "\n".join(parts)
 
-        docs.append(Document(
-            page_content=content,
-            metadata={
-                "so_ky_hieu":        SO_KY_HIEU,
-                "loai_van_ban":      LOAI_VAN_BAN,
-                "nguon_thu_thap":    nguon,
-                "article_reference": article_ref,
-                "article_number":    article_num,
-                "chapter":           chapter,
-                "topic":             topic,
-                "doc_type":          doc_type,
-                "retrieval_keywords":keywords,
-                "source_url":        source_url,
-                "char_count":        len(content),
-                "import_source":     "dataset",
-                "source_file":       source_file,
-            }
-        ))
+        meta = {
+            "so_ky_hieu":        so_ky_hieu,
+            "loai_van_ban":      LOAI_VAN_BAN,
+            "nguon_thu_thap":    nguon,
+            "article_reference": article_ref,
+            "article_number":    article_num,
+            "chapter":           chapter,
+            "topic":             topic,
+            "doc_type":          doc_type,
+            "retrieval_keywords":keywords,
+            "source_url":        source_url,
+            "char_count":        len(content),
+            "import_source":     "dataset",
+            "source_file":       source_file,
+            "importer":          importer,
+        }
+        entity_type = detect_entity_type(f"{topic} {content}")
+        if entity_type:
+            meta["entity_type"] = entity_type
+
+        docs.append(Document(page_content=content, metadata=meta))
     return docs
 
 
-def _build_update_docs(sheet_df: pd.DataFrame, source_file: str) -> list:
-    """Process Legal_Update_2025 sheet.
+def _build_update_docs(sheet_df: pd.DataFrame, source_file: str, importer: str) -> list:
+    """Process Legal_Update_2025 sheet — curated summaries of 2025 legal
+    changes, not test Q&A pairs, so safe to index.
     Actual columns: update_id, date/effective, legal_source,
                     key_change_vi, impact_on_dataset, implemented_in_sheet,
-                    source_url, notes
+                    source_url, notes, so_ky_hieu (optional, 2026-07-30 —
+                    explicit document identifier; falls back to parsing
+                    legal_source's text if omitted, see _derive_so_ky_hieu)
     """
+    from engine.rag_engine import detect_entity_type
+
     docs = []
     for _, row in sheet_df.iterrows():
         article_ref    = _safe(row.get('legal_source',
@@ -172,192 +250,164 @@ def _build_update_docs(sheet_df: pd.DataFrame, source_file: str) -> list:
             continue
 
         content     = "\n".join(parts)
-        article_num = re.sub(r'[^\d]', '', article_ref) if article_ref else ''
+        so_ky_hieu  = _safe(row.get('so_ky_hieu', '')) or _derive_so_ky_hieu(article_ref)
+        article_num = _derive_article_number(article_ref, {})
 
-        docs.append(Document(
-            page_content=content,
-            metadata={
-                "so_ky_hieu":        SO_KY_HIEU,
-                "loai_van_ban":      LOAI_VAN_BAN,
-                "nguon_thu_thap":    "Legal_Update_2025",
-                "article_reference": article_ref,
-                "article_number":    article_num,
-                "topic":             topic,
-                "doc_type":          "legal_update_2025",
-                "char_count":        len(content),
-                "import_source":     "dataset",
-                "source_file":       source_file,
-            }
-        ))
-    return docs
+        meta = {
+            "so_ky_hieu":        so_ky_hieu,
+            "loai_van_ban":      LOAI_VAN_BAN,
+            "nguon_thu_thap":    source_file,
+            "article_reference": article_ref,
+            "article_number":    article_num,
+            "topic":             topic,
+            "doc_type":          "legal_update_2025",
+            "char_count":        len(content),
+            "import_source":     "dataset",
+            "source_file":       source_file,
+            "importer":          importer,
+        }
+        entity_type = detect_entity_type(f"{topic} {content}")
+        if entity_type:
+            meta["entity_type"] = entity_type
 
-
-def _build_qa_docs(sheet_df: pd.DataFrame, sheet_name: str, source_file: str) -> list:
-    """Process any Dataset_* Q&A sheet."""
-    docs = []
-    for _, row in sheet_df.iterrows():
-        q_id        = _safe(row.get('id', ''))
-        q_type      = _safe(row.get('question_type', ''))
-        difficulty  = _safe(row.get('difficulty', ''))
-        topic       = _safe(row.get('topic', ''))
-        question    = _safe(row.get('question_vi', ''))
-        answer      = _safe(row.get('expected_answer_vi', ''))
-        article_ref = _safe(row.get('article_reference', ''))
-        rule        = _safe(row.get('ground_truth_rule', ''))
-        keywords    = _safe(row.get('retrieval_keywords', ''))
-        source_url  = _safe(row.get('source_url', ''))
-
-        if not question or not answer:
-            continue
-
-        parts = [f"Câu hỏi: {question}", f"Trả lời: {answer}"]
-        if rule and rule != answer:
-            parts.append(f"Quy tắc pháp lý: {rule}")
-        if keywords:
-            parts.append(f"Từ khóa: {keywords}")
-        content     = "\n".join(parts)
-        article_num = re.sub(r'[^\d]', '', article_ref)
-
-        docs.append(Document(
-            page_content=content,
-            metadata={
-                "so_ky_hieu":        SO_KY_HIEU,
-                "loai_van_ban":      LOAI_VAN_BAN,
-                "nguon_thu_thap":    f"{sheet_name} Q&A pairs",
-                "doc_id":            q_id,
-                "question_type":     q_type,
-                "difficulty":        difficulty,
-                "topic":             topic,
-                "article_reference": article_ref,
-                "article_number":    article_num,
-                "source_url":        source_url,
-                "char_count":        len(content),
-                "import_source":     "dataset",
-                "source_file":       source_file,
-            }
-        ))
+        docs.append(Document(page_content=content, metadata=meta))
     return docs
 
 
 # ── Main background task ──────────────────────────────────────────────────────
-def run_import_dataset(job_id: str, file_path: str, original_filename: str = None):
+def run_import_dataset(job_id: str, file_path: str, original_filename: str = None, importer: str = "admin1"):
     """
-    Import a dataset Excel file into ChromaDB.
-    Auto-detects 150 (KB_Articles) vs 200-updated (KB_Articles_Updated) format.
-    original_filename: the name the user uploaded, used to persist the file
-    into BASE_DIR afterwards (see _persist_uploaded_dataset) so it becomes
-    selectable in RAG evaluation.
+    Imports KB_Articles(_Updated)/Legal_Update_2025 content into ChromaDB
+    (curated reference material — safe, see module docstring). Dataset_*/
+    Demo_* sheets are NEVER embedded — the file is saved to Dataset/ and
+    registered in the dataset_file tracking table so Quick/Full Evaluation
+    can read them straight from disk instead.
     """
     _set(job_id, status="running", message="Đang đọc file dataset…")
-    source_file = os.path.basename(original_filename) if original_filename else os.path.basename(file_path)
 
     try:
-        xl     = pd.ExcelFile(file_path)
-        sheets = xl.sheet_names
-        _set(job_id, message=f"Phát hiện {len(sheets)} sheets: {', '.join(sheets[:6])}…")
+        with pd.ExcelFile(file_path) as xl:
+            sheets = xl.sheet_names
+            kb_sheet_df, kb_sheet_name = None, None
+            if 'KB_Articles_Updated' in sheets:
+                kb_sheet_df, kb_sheet_name = xl.parse('KB_Articles_Updated'), 'KB_Articles_Updated'
+            elif 'KB_Articles' in sheets:
+                kb_sheet_df, kb_sheet_name = xl.parse('KB_Articles'), 'KB_Articles'
+            update_sheet_df = xl.parse('Legal_Update_2025') if 'Legal_Update_2025' in sheets else None
 
-        all_docs = []
-        report   = []
+        demo_sheets    = [s for s in sheets if s.startswith('Demo_')]
+        dataset_sheets = [s for s in sheets if s.startswith('Dataset_')]
 
-        # ── KB_Articles_Updated (200-updated format) takes priority over KB_Articles
-        if 'KB_Articles_Updated' in sheets:
-            _set(job_id, message="Xử lý KB_Articles_Updated…")
-            d = _build_kb_docs(xl.parse('KB_Articles_Updated'), 'KB_Articles_Updated', source_file)
-            all_docs.extend(d)
-            report.append(f"KB_Articles_Updated: {len(d)} tài liệu")
-        elif 'KB_Articles' in sheets:
-            _set(job_id, message="Xử lý KB_Articles…")
-            d = _build_kb_docs(xl.parse('KB_Articles'), 'KB_Articles', source_file)
-            all_docs.extend(d)
-            report.append(f"KB_Articles: {len(d)} tài liệu")
-
-        # ── Legal_Update_2025 (new in 200-updated)
-        if 'Legal_Update_2025' in sheets:
-            _set(job_id, message="Xử lý Legal_Update_2025…")
-            d = _build_update_docs(xl.parse('Legal_Update_2025'), source_file)
-            all_docs.extend(d)
-            report.append(f"Legal_Update_2025: {len(d)} tài liệu")
-
-        # ── Q&A Dataset sheet (Dataset_200 > Dataset_150 > any Dataset_*)
-        qa_sheet = next(
-            (s for s in ['Dataset_200', 'Dataset_150'] if s in sheets),
-            next((s for s in sheets if s.startswith('Dataset_')), None)
-        )
-        if qa_sheet:
-            _set(job_id, message=f"Xử lý {qa_sheet}…")
-            d = _build_qa_docs(xl.parse(qa_sheet), qa_sheet, source_file)
-            all_docs.extend(d)
-            report.append(f"{qa_sheet}: {len(d)} cặp Q&A")
-
-        if not all_docs:
+        if kb_sheet_df is None and update_sheet_df is None and not demo_sheets and not dataset_sheets:
             _set(job_id, status="failed",
-                 message="❌ Không tìm thấy sheet hợp lệ trong file. "
-                         "Cần ít nhất một trong: KB_Articles, KB_Articles_Updated, Dataset_*")
+                 message="❌ Không tìm thấy sheet hợp lệ trong file. Cần ít nhất một trong: "
+                         "KB_Articles, KB_Articles_Updated, Legal_Update_2025, Demo_*, Dataset_*")
             return
 
-        _set(job_id, message=f"Tổng {len(all_docs)} tài liệu — đang kiểm tra trùng lặp…")
+        # Persist first so every metadata tag and the tracking-table row agree
+        # on the exact on-disk filename (handles the rare name-collision case
+        # where _persist_uploaded_dataset appends a timestamp suffix).
+        saved_name = _persist_uploaded_dataset(file_path, original_filename)
+        if not saved_name:
+            _set(job_id, status="failed", message="❌ Lỗi khi lưu file vào thư mục Dataset/.")
+            return
 
-        # ── Dedup + index
-        embedding = HuggingFaceEmbeddings(model_name="BAAI/bge-small-en-v1.5")
-        vs        = Chroma(persist_directory=DB_PATH, embedding_function=embedding)
+        report = []
+        kb_docs = []
+        if kb_sheet_df is not None:
+            _set(job_id, message=f"Xử lý {kb_sheet_name}…")
+            d = _build_kb_docs(kb_sheet_df, kb_sheet_name, saved_name, importer)
+            kb_docs.extend(d)
+            report.append(f"{kb_sheet_name}: {len(d)} tài liệu (đã nạp ChromaDB)")
+        if update_sheet_df is not None:
+            _set(job_id, message="Xử lý Legal_Update_2025…")
+            d = _build_update_docs(update_sheet_df, saved_name, importer)
+            kb_docs.extend(d)
+            report.append(f"Legal_Update_2025: {len(d)} tài liệu (đã nạp ChromaDB)")
+        if demo_sheets:
+            report.append(f"Demo (chỉ dùng đánh giá, KHÔNG nạp ChromaDB): {', '.join(demo_sheets)}")
+        if dataset_sheets:
+            report.append(f"Dataset (chỉ dùng đánh giá, KHÔNG nạp ChromaDB): {', '.join(dataset_sheets)}")
 
-        existing         = vs.get(include=["metadatas"])
-        existing_ids     = {m.get("so_ky_hieu", "").strip() for m in existing["metadatas"]}
-        existing_doc_ids = {m.get("doc_id", "").strip() for m in existing["metadatas"]}
+        new_count, skipped = 0, 0
+        if kb_docs:
+            _set(job_id, message=f"Tổng {len(kb_docs)} tài liệu KB — đang kiểm tra trùng lặp…")
 
-        new_docs = []
-        skipped  = 0
-        for d in all_docs:
-            doc_id  = d.metadata.get("doc_id", "")
-            ky_hieu = d.metadata.get("so_ky_hieu", "")
-            nguon   = d.metadata.get("nguon_thu_thap", "")
+            embedding = HuggingFaceEmbeddings(
+                model_name="BAAI/bge-m3",
+                model_kwargs={"device": "cpu"},
+                encode_kwargs={"normalize_embeddings": True},
+            )
+            vs = Chroma(persist_directory=DB_PATH, embedding_function=embedding)
 
-            if doc_id and doc_id in existing_doc_ids:
-                skipped += 1
-                continue
-            if not doc_id and ky_hieu in existing_ids and "KB_Articles" in nguon:
-                skipped += 1
-                continue
-            new_docs.append(d)
+            existing          = vs.get(include=["metadatas", "documents"])
+            existing_ids      = {m.get("so_ky_hieu", "").strip() for m in existing["metadatas"]}
+            existing_doc_ids  = {m.get("doc_id", "").strip() for m in existing["metadatas"]}
+            existing_contents = set(existing["documents"])
 
-        _set(job_id, message=f"Bỏ qua {skipped} trùng lặp — thêm {len(new_docs)} tài liệu mới…")
+            new_docs = []
+            for d in kb_docs:
+                doc_id  = d.metadata.get("doc_id", "")
+                ky_hieu = d.metadata.get("so_ky_hieu", "")
+                nguon   = d.metadata.get("nguon_thu_thap", "")
 
-        if new_docs:
-            for i in range(0, len(new_docs), INSERT_BATCH):
-                chunk = new_docs[i:i + INSERT_BATCH]
-                vs.add_documents(chunk)
-                done = min(i + INSERT_BATCH, len(new_docs))
-                _set(job_id, message=f"Indexed {done}/{len(new_docs)}…")
+                if doc_id and doc_id in existing_doc_ids:
+                    skipped += 1
+                    continue
+                if not doc_id and ky_hieu in existing_ids and "KB_Articles" in nguon:
+                    skipped += 1
+                    continue
+                # Rows with neither a doc_id nor "KB_Articles" nguon_thu_thap
+                # (e.g. Legal_Update_2025) have no natural unique key — fall
+                # back to exact content match so re-importing the same file
+                # doesn't duplicate them (found live 2026-07-28).
+                if not doc_id and d.page_content in existing_contents:
+                    skipped += 1
+                    continue
+                new_docs.append(d)
 
-        total_in_db = vs._collection.count()
-        summary = "\n".join(report)
-        result_msg = (
-            f"✅ Hoàn tất!\n{summary}\n"
-            f"Tài liệu mới thêm: {len(new_docs)}\n"
-            f"Bỏ qua (trùng): {skipped}\n"
-            f"Tổng trong DB: {total_in_db}"
-        )
+            new_count = len(new_docs)
+            if new_docs:
+                for i in range(0, len(new_docs), INSERT_BATCH):
+                    vs.add_documents(new_docs[i:i + INSERT_BATCH])
+                    _set(job_id, message=f"Indexed {min(i + INSERT_BATCH, len(new_docs))}/{len(new_docs)}…")
 
-        # Refresh the citation-source whitelist so new so_ky_hieu values become
-        # citable immediately (see engine.rag_engine.refresh_citation_sources).
-        from engine.rag_engine import refresh_citation_sources
-        refresh_citation_sources()
+            from engine.rag_engine import refresh_citation_sources
+            refresh_citation_sources()
 
-        _set(job_id, status="done", message=result_msg)
+            # Auto-tag this file with every unique retrieval_keywords phrase
+            # found across its KB rows, as *secondary* keywords (see
+            # database.database.keyword/source_keyword) — KB content supports
+            # the primary legal sources rather than replacing them, so it
+            # never gets the primary-keyword buff (that's reserved for Law
+            # imports, see import_law_engine.py).
+            from database.database import get_or_create_keyword, set_source_keywords
+            unique_phrases = set()
+            for d in kb_docs:
+                for phrase in (d.metadata.get("retrieval_keywords") or "").split(";"):
+                    phrase = phrase.strip()
+                    if phrase:
+                        unique_phrases.add(phrase)
+            if unique_phrases:
+                secondary_ids = [get_or_create_keyword(p) for p in unique_phrases]
+                set_source_keywords("dataset", saved_name, [], secondary_ids)
+
+        from database.database import register_dataset_file
+        register_dataset_file(saved_name, importer)
+
+        result_msg = "✅ Hoàn tất!\n" + "\n".join(report)
+        if kb_docs:
+            result_msg += f"\nTài liệu KB mới thêm: {new_count}\nBỏ qua (trùng): {skipped}"
+        result_msg += "\nSẵn sàng dùng cho Quick/Full Evaluation."
+
+        _set(job_id, status="done", message=result_msg, saved_dataset_file=saved_name)
 
     except Exception as e:
         import traceback
         traceback.print_exc()
         _set(job_id, status="failed", message=f"❌ Lỗi: {e}")
-
-    finally:
-        if os.path.exists(file_path):
-            saved_name = _persist_uploaded_dataset(file_path, original_filename)
-            if saved_name:
-                _set(job_id, saved_dataset_file=saved_name)
-            else:
-                # Persist failed — fall back to removing the temp file so uploads_tmp doesn't accumulate.
-                try:
-                    os.remove(file_path)
-                except Exception:
-                    pass
+        try:
+            if os.path.exists(file_path):
+                os.remove(file_path)
+        except Exception:
+            pass

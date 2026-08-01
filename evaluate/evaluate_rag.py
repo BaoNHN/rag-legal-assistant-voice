@@ -27,6 +27,20 @@ import json
 import argparse
 import time
 import re
+import warnings
+
+# Silence two known-harmless, third-party UserWarnings that otherwise clutter
+# every eval run: (1) gdown 4.4.0 (a transitive dep of vietocr, used for PDF
+# OCR in import_law_engine.py/build_db_from_pdf.py) still imports the
+# deprecated pkg_resources API; (2) openpyxl warns when a .xlsx has Excel
+# conditional-formatting/data-validation rules it doesn't parse — the actual
+# cell data is read correctly regardless, only that cosmetic formatting is
+# dropped. Registered before pandas/engine imports below so it's in effect
+# for every downstream import that might trigger them.
+warnings.filterwarnings("ignore", message="pkg_resources is deprecated.*")
+warnings.filterwarnings("ignore", message=".*Conditional Formatting extension.*")
+warnings.filterwarnings("ignore", message=".*Data Validation extension.*")
+
 import pandas as pd
 from datetime import datetime
 from langchain_groq import ChatGroq
@@ -136,12 +150,13 @@ def auto_score(question: str, generated: str, expected: str,
 # LLM SCORER
 # =========================
 def llm_score(question: str, generated: str, expected: str,
-              article_ref: str, groq_api_key: str) -> dict:
+              article_ref: str, groq_api_key: str = None) -> dict:
     """
     Use Groq LLM to evaluate quality against the rubric.
     Returns scores dict.
     """
-    llm = ChatGroq(api_key=groq_api_key, model="llama-3.1-8b-instant", temperature=0)
+    from engine.groq_keys import current_key
+    llm = ChatGroq(api_key=groq_api_key or current_key(), model="llama-3.1-8b-instant", temperature=0)
 
     prompt = f"""Bạn là giáo viên chấm điểm câu trả lời pháp lý.
 
@@ -205,14 +220,15 @@ def run_evaluation(split: str, mode: str, max_questions: int = None):
     print(f"RAG Evaluation — split={split}, mode={mode}, n={len(df)}")
     print(f"{'='*60}\n")
 
-    # Load Groq key for LLM mode
+    # Load Groq key(s) for LLM mode — groqkey.txt may hold several,
+    # semicolon-separated (see engine/groq_keys.py)
     groq_key = None
     if mode == "llm":
-        groq_key_path = os.path.join(BASE_DIR, "groqkey.txt")
-        if os.path.exists(groq_key_path):
-            with open(groq_key_path) as f:
-                groq_key = f.read().strip()
-        if not groq_key:
+        from engine.groq_keys import get_keys
+        keys = get_keys()
+        if keys:
+            groq_key = keys[0]
+        else:
             print("⚠️  groqkey.txt not found — falling back to auto mode")
             mode = "auto"
 

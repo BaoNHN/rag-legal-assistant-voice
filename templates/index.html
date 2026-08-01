@@ -2,7 +2,7 @@
 <html lang="vi">
 <head>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" crossorigin="anonymous"/>
-  <link rel="stylesheet" href="/static/style.css"/>
+  <link rel="stylesheet" href="/static/style.css?v={{ static_version }}"/>
   <meta charset="utf-8"/>
   <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
   <title>RAG Legal Assistant</title>
@@ -98,6 +98,7 @@
       background: #40414a;
       border-color: #0DB4A2;
     }
+    .btn-my-voice.hidden { display: none; }
 
     .btn-admin-voice {
       display: none;
@@ -150,11 +151,12 @@
       text-decoration: none;
     }
     .voice-select-bar a:hover { text-decoration: underline; }
+    .voice-select-bar.hidden { display: none; }
 
     /* Role badge in sidebar */
     .role-badge {
       display: inline-block;
-      font-size: 10px;
+      font-size: 15px;
       padding: 2px 7px;
       border-radius: 4px;
       font-weight: 600;
@@ -173,7 +175,8 @@
     }
 
     /* Voice notification bell */
-    .notif-wrap { position: relative; display: inline-block; float: right; margin-right: 8px; }
+    .notif-wrap { position: relative; display: inline-block; }
+    .notif-wrap.hidden { display: none; }
     .notif-bell {
       background: rgba(255,255,255,0.1); border: none; color: white;
       padding: 6px 10px; border-radius: 6px; cursor: pointer; font-size: 15px; position: relative;
@@ -204,24 +207,32 @@
   </style>
 </head>
 <body>
-<div class="layout">
-  <!-- SIDEBAR -->
+<div class="layout{% if is_guest %} sidebar-collapsed{% endif %}" id="layoutRoot">
+  <!-- SIDEBAR — guests get no toggle at all (server-side gated, not just
+       hidden by JS after the fact): there's nothing in it worth opening
+       (no saved chat history for an unauthenticated, never-persisted
+       session), and gating it here avoids any flash-of-the-wrong-state
+       before session_info's async fetch resolves. -->
   <aside class="sidebar">
+    <!-- Top strip left empty on purpose — the fixed icon toggle button below
+         sits directly over this corner while the sidebar is open
+         (sidebar-header's extra top padding, see style.css, reserves room
+         for it). -->
     <div class="sidebar-header">
-      <button class="new-chat">+ New Chat</button>
+      <button class="new-chat">+ Đoạn chat mới</button>
       <!-- Import Law button — shown for teachers & admins via JS -->
       <a href="/import" class="btn-import-law" id="importLawBtn">
-        📥 Import Law
+        📥 Nhập văn bản luật
       </a>
       <!-- Manage Account button — shown only for admins via JS -->
       <a href="/manage_accounts" class="btn-manage-account" id="manageAccountBtn">
-        👤 Manage Account
+        👤 Quản lý tài khoản
       </a>
       <!-- Manage Law button — shown only for admins via JS -->
       <a href="/manage_law" class="btn-manage-law" id="manageLawBtn">
-        🗂️ Manage Law
+        🗂️ Quản lý văn bản luật
       </a>
-      <!-- My Voice — visible to everyone, manages personal voice profiles -->
+      <!-- My Voice — hidden for guests (no account to attach a cloned voice to) -->
       <a href="/voice" class="btn-my-voice" id="myVoiceBtn">
         🎙 Giọng nói của tôi
       </a>
@@ -233,20 +244,59 @@
     <div class="sidebar-chats" id="chat-list"></div>
   </aside>
 
+  <!-- "⚖️ RAG Legal Assistant" + role badge — fixed top-left as one group so
+       the badge always sits right next to the label, sliding together.
+       The icon toggle next to it only exists for logged-in users (guests
+       have no sidebar to toggle), so the group sits closer to the corner
+       when there's no icon. -->
+  {% if not is_guest %}
+  <button id="sidebarToggleFloating" class="floating-toggle" onclick="toggleSidebar()" title="Ẩn/hiện danh sách chat">
+    <i class="fa-solid fa-table-columns"></i>
+  </button>
+  <div class="floating-brand-group">
+    <span class="floating-brand-label">⚖️ RAG Legal Assistant</span>
+    <span id="roleBadge"></span>
+  </div>
+  {% else %}
+  <div class="floating-brand-group floating-brand-group--no-icon">
+    <span class="floating-brand-label">⚖️ RAG Legal Assistant</span>
+    <span id="roleBadge"></span>
+  </div>
+  {% endif %}
+
+  <!-- Mirrors the top-left ⚖️ RAG Legal Assistant / role badge group — same
+       fixed-top-right treatment for voice toggle + login/logout. -->
+  <div class="floating-right-group">
+    <label class="voice-switch" title="Chuyển đổi giọng trả lời">
+      <input type="checkbox" id="voiceToggleInput" onchange="toggleVoice()"/>
+      <span class="voice-switch-track"><span class="voice-switch-knob"></span></span>
+      <span class="voice-switch-label" id="voiceToggleLabel">🎓 Nghiêm túc</span>
+    </label>
+    <!-- Voice notifications (bell) — e.g. clone-voice-station's manager deleted/
+         disabled this user's cloned voice. Hidden for guests (no account). -->
+    <div class="notif-wrap" id="notifWrap">
+      <button class="notif-bell" id="notifBell" onclick="toggleNotifDropdown()" title="Thông báo giọng nói">
+        🔔<span class="notif-badge" id="notifBadge">0</span>
+      </button>
+      <div class="notif-dropdown" id="notifDropdown">
+        <div class="notif-header">Thông báo giọng nói</div>
+        <div id="notifList"></div>
+      </div>
+    </div>
+    <a href="/login" id="loginBtn" class="header-btn" style="display:none;text-decoration:none;">Đăng nhập</a>
+    <button id="logoutBtn" class="header-btn" onclick="logout()">Đăng xuất</button>
+  </div>
+
   <main class="chat-container">
     <div class="header">
-      Chat Assistant
-      <span id="roleBadge"></span>
-      <button onclick="logout()" style="float:right;background:rgba(255,255,255,0.1);border:none;color:white;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:13px;">Logout</button>
-      <div class="notif-wrap">
-        <button class="notif-bell" id="notifBell" onclick="toggleNotifDropdown()" title="Thông báo giọng nói">
-          🔔<span class="notif-badge" id="notifBadge">0</span>
-        </button>
-        <div class="notif-dropdown" id="notifDropdown">
-          <div class="notif-header">Thông báo giọng nói</div>
-          <div id="notifList"></div>
-        </div>
+      <div class="header-left"></div>
+      <!-- Fixed to the viewport center (see style.css), not the grid's
+           "auto" column — stays dead-center regardless of the sidebar
+           state changing padding/left-column content. -->
+      <div class="header-center">
+        Chat Assistant
       </div>
+      <div class="header-right"></div>
     </div>
     <div class="container" id="mainContainer">
 
@@ -254,6 +304,7 @@
       <div id="welcome-screen">
         <h1 class="welcome-title">Chúng ta nên bắt đầu từ đâu?</h1>
         <p class="welcome-subtitle">Đặt câu hỏi về Luật Doanh nghiệp 2020 – 2025</p>
+        <p id="guestNotice" style="display:none;"></p>
         <div class="suggestion-chips">
           <button class="chip" data-prompt="Cổ đông là gì?">💡 Cổ đông là gì?</button>
           <button class="chip" data-prompt="Thành lập công ty TNHH cần điều kiện gì?">🏢 Thành lập công ty TNHH</button>
@@ -266,7 +317,8 @@
 
       <!-- Input bar — design unchanged -->
       <div class="input-area-wrap">
-        <div class="voice-select-bar">
+        <!-- Voice select bar — hidden for guests (no personal cloned voices to pick from) -->
+        <div class="voice-select-bar" id="voiceSelectBar">
           <span>🔊 Giọng đọc:</span>
           <select id="voiceProfileSelect"></select>
           <a href="/voice">Quản lý giọng nói của tôi →</a>
@@ -288,14 +340,46 @@
 
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/material-design-lite/1.3.0/material.indigo-pink.min.css"/>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/material-design-icons/3.0.1/iconfont/material-icons.css"/>
-<script src="/static/script.js"></script>
+<script src="/static/script.js?v={{ static_version }}"></script>
 <script>
-// Show Import Law / Manage Account buttons and role badge based on role
+// Default open/closed state is set server-side (is_guest in app.py's / route
+// controls the initial "sidebar-collapsed" class on #layoutRoot below) — open
+// by default for logged-in users, permanently collapsed for guests (who have
+// no toggle button at all, see the is_guest Jinja guards above).
+// Collapse state lives on #layoutRoot, not on .sidebar itself, so the
+// floating reopen button (a sibling of .sidebar) can react to the same
+// class.
+function toggleSidebar() {
+  document.getElementById('layoutRoot').classList.toggle('sidebar-collapsed');
+}
+
+// Show Import Law / Manage Account buttons and role badge based on role.
+// Also detects guest (unauthenticated) access — window.isGuest is read by
+// script.js's send handler to skip DB-backed chat creation for guests.
+window.isGuest = false;
 (async function() {
   try {
     const res  = await fetch("/session_info");
     const data = await res.json();
     const badge = document.getElementById("roleBadge");
+
+    if (!data.user_id) {
+      window.isGuest = true;
+      document.getElementById("logoutBtn").style.display = "none";
+      document.getElementById("loginBtn").style.display = "inline-block";
+      // Sidebar toggle buttons aren't even rendered for guests (server-side
+      // gated via is_guest in app.py's / route) — nothing to hide here.
+      // Shown under the welcome subtitle, not in the header — a badge next
+      // to "Chat Assistant" up top looked cluttered.
+      const notice = document.getElementById("guestNotice");
+      notice.textContent = "Khách — giới hạn 15 câu/phiên";
+      notice.style.display = "block";
+      // Voice (audio clone) features need an account — hide for guests.
+      document.getElementById("myVoiceBtn").classList.add("hidden");
+      document.getElementById("notifWrap").classList.add("hidden");
+      document.getElementById("voiceSelectBar").classList.add("hidden");
+      return;
+    }
 
     if (data.user_type === "teacher" || data.user_type === "admin") {
       document.getElementById("importLawBtn").classList.add("visible");
@@ -348,6 +432,7 @@ function timeAgo(ts) {
 }
 
 async function refreshNotifications() {
+  if (window.isGuest) return;
   try {
     const data = await fetch("/voice/notifications").then(r => r.json());
     const badge = document.getElementById("notifBadge");

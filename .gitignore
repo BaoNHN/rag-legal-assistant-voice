@@ -1,17 +1,24 @@
-/chroma_db/
-/chroma_db_backup_*/
-/chat.db.bak
 /rag_env/
 /chat.db
+/chat.db.bak
+/chroma_db/
+/chroma_db_backup_*/
 /uploads_tmp/
-groqkey.txt
+/poppler/
+
+# Secrets — never commit real API keys
+/groqkey.txt
 groqkeyss.txt
 voice_station_key.txt
 .device_config
-.idea/
-terminal.txt
-ocr_raw_output.txt
-/poppler/
+
+# Runtime artifacts — regenerated, not needed to run the app
 __pycache__/
 *.pyc
 *.pyo
+/eval_results_*.xlsx
+
+# Editor / local-only
+.idea/
+terminal.txt
+ocr_raw_output.txt
