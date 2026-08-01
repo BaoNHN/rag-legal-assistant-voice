@@ -5,6 +5,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 import os
 import re
+import secrets
 import time
 import uuid
 import io
@@ -54,12 +55,23 @@ from voice.station_client import MIN_TRAIN_SAMPLES, MAX_CLONED_VOICES_PER_USER, 
 
 PASSWORD_RE = re.compile(r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$')
 
-app = FastAPI()
-app.add_middleware(SessionMiddleware, secret_key="secret_key", max_age=7200)
-
 BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
 UPLOAD_DIR = os.path.join(BASE_DIR, "uploads_tmp")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+# Session secret — generated once and persisted to disk (gitignored), not
+# hardcoded. A hardcoded/known secret lets anyone forge a signed session
+# cookie for any user_id/role (including role=2 admin) without ever logging
+# in, since Starlette's SessionMiddleware only signs the cookie with this key.
+SESSION_SECRET_PATH = os.path.join(BASE_DIR, "session_secret.txt")
+if not os.path.exists(SESSION_SECRET_PATH):
+    with open(SESSION_SECRET_PATH, "w") as f:
+        f.write(secrets.token_urlsafe(32))
+with open(SESSION_SECRET_PATH) as f:
+    SESSION_SECRET = f.read().strip()
+
+app = FastAPI()
+app.add_middleware(SessionMiddleware, secret_key=SESSION_SECRET, max_age=7200)
 
 app.mount("/static", StaticFiles(directory=os.path.join(BASE_DIR, "static")), name="static")
 templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))

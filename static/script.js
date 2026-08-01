@@ -84,11 +84,22 @@ function extractSpokenText(text) {
     return text.split(/\n*📖 Nguồn chính:/)[0].trim().replace(/\*\*/g, '');
 }
 
+// Escapes text for safe insertion into innerHTML. Needed anywhere user-typed
+// text (chat messages, chat titles) or LLM output (which can echo back
+// retrieved-document or user-question content) gets rendered as HTML rather
+// than left as plain DOM text -- without this, a message/title containing
+// "<" or "&" renders as live markup instead of literal characters.
+function escapeHtml(s) {
+    const div = document.createElement('div');
+    div.textContent = s ?? '';
+    return div.innerHTML;
+}
+
 // Format assistant message: parse structured sections + citation block
 function formatAssistantHTML(text) {
     const parts = text.split(/\n*📖 Nguồn chính:/);
     // Strip ** bold markers so they never appear in UI
-    const bodyText = parts[0].trim().replace(/\*\*/g, '');
+    const bodyText = escapeHtml(parts[0].trim().replace(/\*\*/g, ''));
 
     // indexOf-based section extractor — more reliable than regex for Vietnamese
     function getSection(label) {
@@ -127,7 +138,7 @@ function formatAssistantHTML(text) {
 
     // Citation blocks
     if (parts.length > 1) {
-        const citationRaw = parts[1].trim();
+        const citationRaw = escapeHtml(parts[1].trim());
         const citParts = citationRaw.split(/\n📎 Nguồn tham khảo:/);
         const primary = citParts[0].trim().replace(/\n/g, '<br>');
         html += `<div class="msg-citation">📖 Nguồn chính: ${primary}</div>`;
@@ -143,7 +154,7 @@ function formatAssistantHTML(text) {
 async function displayMessage(message, isUser) {
     const msgElem = document.createElement('div');
     if (isUser) {
-        msgElem.innerHTML = message.replace(/\n/g, "<br>");
+        msgElem.innerHTML = escapeHtml(message).replace(/\n/g, "<br>");
     } else {
         msgElem.innerHTML = formatAssistantHTML(message);
     }
@@ -433,7 +444,7 @@ function showChatLimitPicker(message, chatsToPick) {
 
     const rows = chatsToPick.map(c => `
         <div class="chat-modal-row" data-id="${c.id}">
-            <span title="${c.title}">${c.title}</span>
+            <span title="${escapeHtml(c.title)}">${escapeHtml(c.title)}</span>
             <button class="chat-modal-delete">Xoá</button>
         </div>
     `).join("");
@@ -441,7 +452,7 @@ function showChatLimitPicker(message, chatsToPick) {
     overlay.innerHTML = `
         <div class="chat-modal">
             <h3>Đã đạt giới hạn đoạn chat</h3>
-            <p>${message || "Vui lòng xoá một đoạn chat cũ trước khi tạo mới."}</p>
+            <p>${escapeHtml(message) || "Vui lòng xoá một đoạn chat cũ trước khi tạo mới."}</p>
             ${rows}
             <button class="chat-modal-close">Đóng</button>
         </div>
@@ -504,7 +515,7 @@ function createChatItem(chatId, title) {
     item.dataset.title = title;
 
     item.innerHTML = `
-        <span class="chat-title" title="${title}">${title}</span>
+        <span class="chat-title" title="${escapeHtml(title)}">${escapeHtml(title)}</span>
         <span class="chat-options">⋯</span>
     `;
 

@@ -231,6 +231,14 @@ async function loadUsers() {
       return;
     }
 
+    // data-* attributes only -- never build onclick="..." from user-controlled
+    // strings (u.user_name is chosen by the user themselves at registration).
+    // HTML-escaping a value doesn't make it safe inside an inline event-handler
+    // attribute: the browser HTML-decodes the attribute text *before* parsing
+    // it as JS, so a username containing a bare `"` still breaks out of the
+    // onclick="..." attribute and injects arbitrary markup/script into this
+    // admin-only page, regardless of any quote-escaping applied to the JS
+    // string content itself.
     tbody.innerHTML = users.map(u => {
       const roleClass  = ROLE_CLASS[u.role] || 'student';
       const isActive   = u.status === 0;
@@ -239,12 +247,12 @@ async function loadUsers() {
         ? '<span class="status-pill active">Đang hoạt động</span>'
         : '<span class="status-pill disabled">Đã vô hiệu hóa</span>';
       const toggleBtn = isActive
-        ? `<button class="btn-action btn-deactivate" ${isSelf ? 'disabled title="Không thể tự vô hiệu hóa"' : ''} onclick="toggleStatus(${u.user_id}, 1)">Vô hiệu hóa</button>`
-        : `<button class="btn-action btn-activate" onclick="toggleStatus(${u.user_id}, 0)">Kích hoạt</button>`;
-      const deleteBtn = `<button class="btn-action btn-delete" ${isSelf ? 'disabled title="Không thể tự xoá"' : ''} onclick="removeUser(${u.user_id}, '${u.user_name.replace(/'/g, "\\'")}')">Xoá</button>`;
+        ? `<button class="btn-action btn-deactivate" ${isSelf ? 'disabled title="Không thể tự vô hiệu hóa"' : ''} data-action="deactivate">Vô hiệu hóa</button>`
+        : `<button class="btn-action btn-activate" data-action="activate">Kích hoạt</button>`;
+      const deleteBtn = `<button class="btn-action btn-delete" ${isSelf ? 'disabled title="Không thể tự xoá"' : ''} data-action="delete">Xoá</button>`;
 
       return `
-        <tr>
+        <tr data-id="${u.user_id}" data-name="${escapeHtml(u.user_name)}">
           <td>${escapeHtml(u.user_name)}${isSelf ? ' <span style="color:var(--gray);font-size:11px;">(bạn)</span>' : ''}</td>
           <td>
             <span class="role-pill ${roleClass}">${escapeHtml(u.role_name)}</span>
@@ -265,6 +273,17 @@ function escapeHtml(s) {
   div.textContent = s;
   return div.innerHTML;
 }
+
+document.getElementById('usersTbody').addEventListener('click', (e) => {
+  const btn = e.target.closest('button[data-action]');
+  if (!btn || btn.disabled) return;
+  const row  = btn.closest('tr');
+  const id   = Number(row.dataset.id);
+  const name = row.dataset.name;
+  if (btn.dataset.action === 'deactivate') toggleStatus(id, 1);
+  else if (btn.dataset.action === 'activate') toggleStatus(id, 0);
+  else if (btn.dataset.action === 'delete') removeUser(id, name);
+});
 
 async function toggleStatus(userId, newStatus) {
   try {

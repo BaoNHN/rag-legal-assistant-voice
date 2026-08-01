@@ -1,8 +1,37 @@
 # database.py
 
+import hashlib
+import secrets
 import sqlite3
 import time
 import os
+
+PBKDF2_ITERATIONS = 200_000
+
+
+def _hash_password(password: str, salt: bytes = None) -> str:
+    salt = salt or os.urandom(16)
+    dk   = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, PBKDF2_ITERATIONS)
+    return f"{salt.hex()}${dk.hex()}"
+
+
+def _verify_password(password: str, stored: str) -> bool:
+    try:
+        salt_hex, hash_hex = (stored or "").split("$")
+    except ValueError:
+        return False
+    dk = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), bytes.fromhex(salt_hex), PBKDF2_ITERATIONS)
+    return secrets.compare_digest(dk.hex(), hash_hex)
+
+
+def _is_hashed(stored: str) -> bool:
+    """PBKDF2 hashes from _hash_password are always '<32 hex><\\$><64 hex>' --
+    a real plaintext password matching that exact shape is not realistic."""
+    if not stored or "$" not in stored:
+        return False
+    salt_hex, _, hash_hex = stored.partition("$")
+    hexdigits = set("0123456789abcdef")
+    return len(salt_hex) == 32 and len(hash_hex) == 64 and set(salt_hex + hash_hex) <= hexdigits
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # database/ → root
 DB_NAME  = os.path.join(BASE_DIR, "chat.db")
@@ -346,6 +375,28 @@ def init_db():
     conn.commit()
     conn.close()
 
+    _migrate_plaintext_passwords()
+
+
+def _migrate_plaintext_passwords():
+    """One-time upgrade: passwords used to be stored/compared in plaintext.
+    Since the plaintext is still sitting right there in the column, this hashes
+    it in place -- no user needs to reset anything, login keeps working the
+    same way. Safe to run on every startup: already-hashed rows are detected
+    via _is_hashed() and left untouched."""
+    conn = sqlite3.connect(DB_NAME)
+    c    = conn.cursor()
+    rows = c.execute("SELECT user_id, password FROM users").fetchall()
+    migrated = 0
+    for user_id, password in rows:
+        if password and not _is_hashed(password):
+            c.execute("UPDATE users SET password=? WHERE user_id=?", (_hash_password(password), user_id))
+            migrated += 1
+    if migrated:
+        conn.commit()
+        print(f"[auth] Migrated {migrated} plaintext password(s) to PBKDF2 hashes.")
+    conn.close()
+
 
 # =========================
 # CONST (key/value store)
@@ -418,12 +469,12 @@ def login_user(username: str, password: str):
     """
     conn = sqlite3.connect(DB_NAME)
     row  = conn.execute(
-        "SELECT user_id, role, status FROM users WHERE user_name=? AND password=?",
-        (username, password)
+        "SELECT user_id, role, status, password FROM users WHERE user_name=?",
+        (username,)
     ).fetchone()
     conn.close()
 
-    if not row:
+    if not row or not _verify_password(password, row[3]):
         return None
 
     role   = int(row[1])
@@ -629,7 +680,7 @@ def create_user(user_name: str, password: str, role: int):
     try:
         c.execute(
             "INSERT INTO users (user_name, password, role, status) VALUES (?,?,?,0)",
-            (user_name, password, role)
+            (user_name, _hash_password(password), role)
         )
         conn.commit()
         return True
@@ -665,12 +716,12 @@ def change_user_password(username: str, old_password: str, new_password: str):
     user = get_user_by_name(username)
     if not user:
         return False, "Tài khoản không tồn tại"
-    if user["password"] != old_password:
+    if not _verify_password(old_password, user["password"]):
         return False, "Mật khẩu cũ không đúng"
 
     conn = sqlite3.connect(DB_NAME)
     c    = conn.cursor()
-    c.execute("UPDATE users SET password=? WHERE user_name=?", (new_password, username))
+    c.execute("UPDATE users SET password=? WHERE user_name=?", (_hash_password(new_password), username))
     conn.commit()
     conn.close()
     return True, ""
