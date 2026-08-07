@@ -228,12 +228,49 @@ async function speakMessage(text, btn) {
 }
 
 // ── Mic (speech-to-text) button ───────────────────────────────────────────
+// Live mode: every LIVE_TRANSCRIBE_INTERVAL_MS while still recording, the
+// audio captured so far is re-sent to Whisper (via clone-voice-station) and
+// the chat input is updated with the running transcript — recording itself
+// only stops when the user clicks the mic button again.
 let _mediaRecorder = null;
 let _recordingChunks = [];
+let _liveTranscribeTimer = null;
+let _liveTranscribeInFlight = false;
+let _lastLiveTranscript = null;
+const LIVE_TRANSCRIBE_INTERVAL_MS = 2500;
+
+async function transcribeChunksSoFar() {
+    const formData = new FormData();
+    formData.append('audio', new Blob(_recordingChunks, { type: 'audio/webm' }), 'recording.webm');
+    const resp = await fetch('/voice/transcribe', { method: 'POST', body: formData });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.message || data.error || data.detail || ('HTTP ' + resp.status));
+    return data.text || '';
+}
+
+async function liveTranscribeTick() {
+    if (_liveTranscribeInFlight || _recordingChunks.length === 0) return;
+    _liveTranscribeInFlight = true;
+    try {
+        const text = await transcribeChunksSoFar();
+        // Only overwrite if the user hasn't started editing the input
+        // themselves mid-recording (don't clobber their own typing).
+        if (text && (chatInput.value === '' || chatInput.value === _lastLiveTranscript)) {
+            chatInput.value = text;
+            _lastLiveTranscript = text;
+        }
+    } catch (e) {
+        // Best-effort — the final transcribe on stop is authoritative, so
+        // a dropped live tick just means one less mid-recording update.
+        console.warn('[Voice] Live transcribe tick failed:', e);
+    } finally {
+        _liveTranscribeInFlight = false;
+    }
+}
 
 micButton?.addEventListener('click', async () => {
     if (_mediaRecorder && _mediaRecorder.state === 'recording') {
-        _mediaRecorder.stop();  // triggers onstop below, which sends the audio off
+        _mediaRecorder.stop();  // triggers onstop below, which sends the final audio off
         return;
     }
 
@@ -246,23 +283,23 @@ micButton?.addEventListener('click', async () => {
     }
 
     _recordingChunks = [];
+    _lastLiveTranscript = null;
     _mediaRecorder = new MediaRecorder(stream);
     _mediaRecorder.ondataavailable = e => { if (e.data.size > 0) _recordingChunks.push(e.data); };
     _mediaRecorder.onstop = async () => {
+        clearInterval(_liveTranscribeTimer);
+        _liveTranscribeTimer = null;
         stream.getTracks().forEach(t => t.stop());
         micButton.classList.remove('recording');
         micButton.classList.add('transcribing');
 
-        const blob = new Blob(_recordingChunks, { type: 'audio/webm' });
         try {
-            const formData = new FormData();
-            formData.append('audio', blob, 'recording.webm');
-            const resp = await fetch('/voice/transcribe', { method: 'POST', body: formData });
-            const data = await resp.json();
-            if (!resp.ok) throw new Error(data.error || data.detail || ('HTTP ' + resp.status));
+            const text = await transcribeChunksSoFar();
             // Fill the input rather than auto-send — Whisper can mishear Vietnamese
             // legal terms, so the user gets a chance to review/edit before sending.
-            chatInput.value = data.text || '';
+            if (text && (chatInput.value === '' || chatInput.value === _lastLiveTranscript)) {
+                chatInput.value = text;
+            }
             chatInput.focus();
         } catch (e) {
             console.error('[Voice] Nhận diện giọng nói thất bại:', e);
@@ -272,8 +309,11 @@ micButton?.addEventListener('click', async () => {
         }
     };
 
-    _mediaRecorder.start();
+    // 500ms timeslice so chunks accumulate progressively instead of only at
+    // stop — required for liveTranscribeTick to have growing audio to send.
+    _mediaRecorder.start(500);
     micButton.classList.add('recording');
+    _liveTranscribeTimer = setInterval(liveTranscribeTick, LIVE_TRANSCRIBE_INTERVAL_MS);
 });
 
 async function callApi(prompt) {

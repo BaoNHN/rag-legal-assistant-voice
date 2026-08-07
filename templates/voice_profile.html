@@ -219,7 +219,7 @@ h1 {
 .script-title { flex: 1; font-size: 13.5px; }
 .script-title .done { color: #4DFFB4; margin-right: 6px; }
 .script-text {
-  font-size: 12px;
+  font-size: 16px;
   color: var(--gray);
   margin-top: 3px;
   line-height: 1.5;
@@ -288,6 +288,7 @@ h1 {
         <button class="btn-small" id="trainBtn" disabled>🚀 Bắt đầu huấn luyện</button>
         <span class="status-pill" id="trainStatusPill" style="margin-left:10px;"></span>
       </div>
+      <p class="progress-note" id="trainProgressNote" style="display:none;"></p>
     </div>
   </div>
 </main>
@@ -342,7 +343,13 @@ async function loadProfiles() {
   profiles = await fetch('/voice/profiles').then(r => r.json());
   const list = document.getElementById('profilesList');
   if (!Array.isArray(profiles) || profiles.length === 0) {
-    list.innerHTML = '<div class="empty-state">Chưa có giọng nói nào.</div>';
+    // An empty list is ambiguous: either the user genuinely has no voices
+    // yet, or clone-voice-station is down and every read silently degrades
+    // to []. Disambiguate via /voice/status before showing the empty state.
+    const status = await fetch('/voice/status').then(r => r.json()).catch(() => ({ available: true }));
+    list.innerHTML = status.available
+      ? '<div class="empty-state">Chưa có giọng nói nào.</div>'
+      : '<div class="empty-state">Dịch vụ giọng nói hiện không khả dụng. Vui lòng thử lại sau.</div>';
   } else {
     list.innerHTML = profiles.map(p => renderProfileRow(p)).join('');
   }
@@ -492,6 +499,17 @@ function updateTrainStatusUI(profile) {
   const pill = document.getElementById('trainStatusPill');
   pill.className = `status-pill ${profile.status}`;
   pill.textContent = statusLabel(profile.status) + (profile.error_message ? ': ' + profile.error_message : '');
+
+  // Live progress text while training (polled every 5s by refreshSamples below) --
+  // e.g. "Đang trích xuất đặc trưng HuBERT trên cpu…" instead of a static
+  // "Đang huấn luyện" pill sitting there unchanged for however long training takes.
+  const note = document.getElementById('trainProgressNote');
+  if (profile.status === 'training' && profile.progress_message) {
+    note.textContent = profile.progress_message;
+    note.style.display = 'block';
+  } else {
+    note.style.display = 'none';
+  }
 }
 
 async function toggleRecord(scriptId, btnEl) {

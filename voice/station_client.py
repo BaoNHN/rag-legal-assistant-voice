@@ -29,7 +29,11 @@ _client = VoiceStationClient.from_key_file(
     KEY_PATH,
     base_url=os.getenv("VOICE_STATION_URL", "http://127.0.0.1:8090"),
     request_timeout=int(os.getenv("VOICE_STATION_TIMEOUT", "15")),
-    speak_timeout=int(os.getenv("VOICE_STATION_SPEAK_TIMEOUT", "30")),
+    # Local RVC fallback (no Colab endpoint configured) reloads the model fresh
+    # every call via subprocess -- measured ~34s for a short phrase on this
+    # hardware, so the old 30s default was cutting it off just before it
+    # finished. 90s covers that with real margin for longer answers.
+    speak_timeout=int(os.getenv("VOICE_STATION_SPEAK_TIMEOUT", "90")),
     upload_timeout=int(os.getenv("VOICE_STATION_UPLOAD_TIMEOUT", "30")),
 )
 

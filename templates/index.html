@@ -407,6 +407,19 @@ window.isGuest = false;
     const select = document.getElementById("voiceProfileSelect");
     if (!select || !Array.isArray(profiles)) return;
 
+    if (profiles.length === 0) {
+      // An empty list is ambiguous: either the user genuinely has no voices
+      // yet, or clone-voice-station (the standalone voice service) is down
+      // and every read silently degrades to []. Disambiguate via /voice/status.
+      const status = await fetch("/voice/status").then(r => r.json()).catch(() => ({ available: true }));
+      if (!status.available) {
+        select.innerHTML = `<option value="" disabled selected>Dịch vụ giọng nói hiện không khả dụng</option>`;
+        select.disabled = true;
+        window.__selectedVoiceProfileId = null;
+        return;
+      }
+    }
+
     select.innerHTML = profiles.map(p => {
       const label = p.kind === "builtin" ? p.name : `${p.name} (giọng riêng${p.status !== "ready" ? " — " + p.status : ""})`;
       const disabled = p.kind === "cloned" && p.status !== "ready" ? "disabled" : "";

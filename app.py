@@ -1039,6 +1039,13 @@ def _voice_error(e: VoiceStationError) -> JSONResponse:
     return JSONResponse({"status": "error", "message": e.message}, status_code=e.status_code)
 
 
+@app.get("/voice/status")
+async def voice_status_route(request: Request):
+    if not logged_in(request):
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    return {"available": station_client.is_available()}
+
+
 @app.get("/voice/scripts")
 async def voice_scripts_route(request: Request):
     if not logged_in(request):
