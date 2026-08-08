@@ -239,26 +239,65 @@ let _liveTranscribeInFlight = false;
 let _lastLiveTranscript = null;
 const LIVE_TRANSCRIBE_INTERVAL_MS = 2500;
 
-async function transcribeChunksSoFar() {
+// Stale-response guard: a live tick's request and the final stop-triggered
+// request can both be in flight at once (stopping the recorder doesn't
+// cancel a tick that's already mid-fetch), and nothing about HTTP guarantees
+// they resolve in the order they were sent — a slow, older/partial-audio
+// tick response can land after the final, complete-audio response and
+// clobber it. Tag every request with a sequence number at send time; when a
+// response comes back, only apply it if it's newer than the last one
+// actually applied.
+let _requestSeq = 0;
+let _appliedSeq  = 0;
+
+// Sliding window for live ticks — caps how much audio a tick re-transcribes
+// so cost stays flat instead of growing with total recording length (tick N
+// used to have to re-send/re-infer all of the N*500ms recorded so far).
+// _recordingChunks[0] carries the WebM header (Matroska Segment/Tracks info)
+// that every later chunk depends on to decode — later chunks are just codec
+// SimpleBlocks with no header of their own — so it's always kept even once
+// it ages out of the time window, with the most recent chunks appended after it.
+const WINDOW_CHUNK_COUNT = 14; // ~7s at the 500ms MediaRecorder timeslice below
+
+function _windowedChunks() {
+    if (_recordingChunks.length <= WINDOW_CHUNK_COUNT) return _recordingChunks;
+    const header = _recordingChunks[0];
+    const recent = _recordingChunks.slice(-WINDOW_CHUNK_COUNT);
+    return recent.includes(header) ? recent : [header, ...recent];
+}
+
+// Sends the given chunks (the full recording for the final transcribe, or a
+// capped window for a live tick — see _windowedChunks()) and returns the
+// transcript.
+async function transcribeChunksSoFar(chunks) {
     const formData = new FormData();
-    formData.append('audio', new Blob(_recordingChunks, { type: 'audio/webm' }), 'recording.webm');
+    formData.append('audio', new Blob(chunks, { type: 'audio/webm' }), 'recording.webm');
     const resp = await fetch('/voice/transcribe', { method: 'POST', body: formData });
     const data = await resp.json();
     if (!resp.ok) throw new Error(data.message || data.error || data.detail || ('HTTP ' + resp.status));
     return data.text || '';
 }
 
+// Applies a transcript to the chat input only if `seq` is newer than the
+// last one actually applied (drops a late-arriving, now-superseded
+// response instead of clobbering fresher text), and only if the user hasn't
+// started editing the input themselves mid-recording (don't clobber their
+// own typing either).
+function _applyLiveTranscript(seq, text) {
+    if (!text || seq < _appliedSeq) return;
+    if (!(chatInput.value === '' || chatInput.value === _lastLiveTranscript)) return;
+    _appliedSeq = seq;
+    chatInput.value = text;
+    _lastLiveTranscript = text;
+}
+
 async function liveTranscribeTick() {
     if (_liveTranscribeInFlight || _recordingChunks.length === 0) return;
     _liveTranscribeInFlight = true;
+    const seq = ++_requestSeq;
     try {
-        const text = await transcribeChunksSoFar();
-        // Only overwrite if the user hasn't started editing the input
-        // themselves mid-recording (don't clobber their own typing).
-        if (text && (chatInput.value === '' || chatInput.value === _lastLiveTranscript)) {
-            chatInput.value = text;
-            _lastLiveTranscript = text;
-        }
+        const text = await transcribeChunksSoFar(_windowedChunks());
+        _applyLiveTranscript(seq, text);
     } catch (e) {
         // Best-effort — the final transcribe on stop is authoritative, so
         // a dropped live tick just means one less mid-recording update.
@@ -284,6 +323,8 @@ micButton?.addEventListener('click', async () => {
 
     _recordingChunks = [];
     _lastLiveTranscript = null;
+    _requestSeq = 0;
+    _appliedSeq = 0;
     _mediaRecorder = new MediaRecorder(stream);
     _mediaRecorder.ondataavailable = e => { if (e.data.size > 0) _recordingChunks.push(e.data); };
     _mediaRecorder.onstop = async () => {
@@ -293,13 +334,16 @@ micButton?.addEventListener('click', async () => {
         micButton.classList.remove('recording');
         micButton.classList.add('transcribing');
 
+        // Issued after every live tick for this recording, so this seq
+        // number is guaranteed the highest — it always wins
+        // _applyLiveTranscript's check, even if a straggling tick response
+        // arrives after this one does.
+        const seq = ++_requestSeq;
         try {
-            const text = await transcribeChunksSoFar();
             // Fill the input rather than auto-send — Whisper can mishear Vietnamese
             // legal terms, so the user gets a chance to review/edit before sending.
-            if (text && (chatInput.value === '' || chatInput.value === _lastLiveTranscript)) {
-                chatInput.value = text;
-            }
+            const text = await transcribeChunksSoFar(_recordingChunks); // full recording, not windowed
+            _applyLiveTranscript(seq, text);
             chatInput.focus();
         } catch (e) {
             console.error('[Voice] Nhận diện giọng nói thất bại:', e);
