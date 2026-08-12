@@ -510,8 +510,9 @@ Giọng dựng sẵn có thể chọn (`voice_profiles`, kind=`builtin`, không 
 RVC chạy trên Colab (`colab/voice_server.ipynb`), lộ ra ngoài qua tunnel (VD ngrok). Endpoint được lưu trong bảng `app_settings` (key `rvc_endpoint`) — seed từ biến môi trường `RVC_ENDPOINT` khi khởi động lần đầu, sau đó admin có thể sửa trực tiếp qua giao diện quản lý giọng nói mà không cần khởi động lại app:
 
 ```bash
-# Windows — chỉ cần khi seed lần đầu, sau đó sửa qua UI
-set RVC_ENDPOINT=https://xxxx.ngrok.io
+# Chỉ cần khi seed lần đầu, sau đó sửa qua UI
+set RVC_ENDPOINT=https://xxxx.ngrok.io          # CMD
+$env:RVC_ENDPOINT = "https://xxxx.ngrok.io"     # PowerShell
 python app.py
 ```
 

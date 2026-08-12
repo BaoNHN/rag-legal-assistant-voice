@@ -858,8 +858,9 @@ python -c &quot;print(open('groqkey.txt').read().strip()[:8] + '...')&quot;
 </ol>
 <h3 id="124-cau-hinh-endpoint-rvc-colab">12.4 Cấu Hình Endpoint RVC (Colab)</h3>
 <p>RVC chạy trên Colab (<code>colab/voice_server.ipynb</code>), lộ ra ngoài qua tunnel (VD ngrok). Endpoint được lưu trong bảng <code>app_settings</code> (key <code>rvc_endpoint</code>) — seed từ biến môi trường <code>RVC_ENDPOINT</code> khi khởi động lần đầu, sau đó admin có thể sửa trực tiếp qua giao diện quản lý giọng nói mà không cần khởi động lại app:</p>
-<pre><code class="language-bash"># Windows — chỉ cần khi seed lần đầu, sau đó sửa qua UI
-set RVC_ENDPOINT=https://xxxx.ngrok.io
+<pre><code class="language-bash"># Chỉ cần khi seed lần đầu, sau đó sửa qua UI
+set RVC_ENDPOINT=https://xxxx.ngrok.io          # CMD
+$env:RVC_ENDPOINT = &quot;https://xxxx.ngrok.io&quot;     # PowerShell
 python app.py
 </code></pre>
 <hr />
