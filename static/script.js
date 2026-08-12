@@ -228,16 +228,26 @@ async function speakMessage(text, btn) {
 }
 
 // ── Mic (speech-to-text) button ───────────────────────────────────────────
-// Live mode: every LIVE_TRANSCRIBE_INTERVAL_MS while still recording, the
-// audio captured so far is re-sent to Whisper (via clone-voice-station) and
-// the chat input is updated with the running transcript — recording itself
-// only stops when the user clicks the mic button again.
+// Live mode: every _liveTranscribeIntervalMs while still recording, the
+// audio captured so far is re-sent to Whisper and the chat input is updated
+// with the running transcript — recording itself only stops when the user
+// clicks the mic button again.
 let _mediaRecorder = null;
 let _recordingChunks = [];
 let _liveTranscribeTimer = null;
 let _liveTranscribeInFlight = false;
 let _lastLiveTranscript = null;
-const LIVE_TRANSCRIBE_INTERVAL_MS = 2500;
+let _liveTranscribeIntervalMs = LIVE_TRANSCRIBE_INTERVAL_REMOTE_MS; // set per-recording in micButton's click handler below
+
+// Local (in-process, no network hop) can afford a tighter tick than remote
+// (an HTTP round trip to clone-voice-station plus its own inference) — same
+// local/remote-aware cadence voice-lab-example's /compare page uses for its
+// own local-vs-lazy comparison (1s/2s there). Which one applies is decided
+// fresh at the start of each recording via GET /voice/status's
+// local_stt_enabled, so toggling local mode in admin_voice_models.html takes
+// effect on the very next recording, no reload needed.
+const LIVE_TRANSCRIBE_INTERVAL_LOCAL_MS  = 1000;
+const LIVE_TRANSCRIBE_INTERVAL_REMOTE_MS = 2000;
 
 // Stale-response guard: a live tick's request and the final stop-triggered
 // request can both be in flight at once (stopping the recorder doesn't
@@ -271,7 +281,10 @@ function _windowedChunks() {
 // transcript.
 async function transcribeChunksSoFar(chunks) {
     const formData = new FormData();
-    formData.append('audio', new Blob(chunks, { type: 'audio/webm' }), 'recording.webm');
+    // Actual recorder mimeType, not a hardcoded guess (matches voice-lab-example's
+    // compare.js) -- MediaRecorder's default container/codec isn't guaranteed
+    // to be exactly "audio/webm" across browsers.
+    formData.append('audio', new Blob(chunks, { type: _mediaRecorder?.mimeType || 'audio/webm' }), 'recording.webm');
     const resp = await fetch('/voice/transcribe', { method: 'POST', body: formData });
     const data = await resp.json();
     if (!resp.ok) throw new Error(data.message || data.error || data.detail || ('HTTP ' + resp.status));
@@ -321,6 +334,19 @@ micButton?.addEventListener('click', async () => {
         return;
     }
 
+    // Decided fresh per recording (not cached) so toggling local mode in
+    // admin_voice_models.html applies to the very next recording started.
+    // Best-effort — a failed/unauthorized status check just keeps the
+    // slower remote-paced default rather than blocking the mic.
+    try {
+        const status = await fetch('/voice/status').then(r => r.json());
+        _liveTranscribeIntervalMs = status.local_stt_enabled
+            ? LIVE_TRANSCRIBE_INTERVAL_LOCAL_MS
+            : LIVE_TRANSCRIBE_INTERVAL_REMOTE_MS;
+    } catch (e) {
+        _liveTranscribeIntervalMs = LIVE_TRANSCRIBE_INTERVAL_REMOTE_MS;
+    }
+
     _recordingChunks = [];
     _lastLiveTranscript = null;
     _requestSeq = 0;
@@ -357,7 +383,7 @@ micButton?.addEventListener('click', async () => {
     // stop — required for liveTranscribeTick to have growing audio to send.
     _mediaRecorder.start(500);
     micButton.classList.add('recording');
-    _liveTranscribeTimer = setInterval(liveTranscribeTick, LIVE_TRANSCRIBE_INTERVAL_MS);
+    _liveTranscribeTimer = setInterval(liveTranscribeTick, _liveTranscribeIntervalMs);
 });
 
 async function callApi(prompt) {

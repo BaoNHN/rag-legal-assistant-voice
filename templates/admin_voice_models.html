@@ -186,6 +186,18 @@ tbody tr:hover { background: rgba(255,255,255,0.02); }
 
 .empty-state { padding: 32px; text-align: center; color: var(--gray); font-size: 13.5px; }
 .mono { font-family: monospace; font-size: 11.5px; color: var(--gray); }
+
+.pack-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  font-size: 13px;
+}
+.pack-row:last-child { border-bottom: none; }
+.pack-row .pack-label { flex: 1; }
+.pack-row .pack-meta { color: var(--gray); font-size: 11.5px; }
 </style>
 </head>
 <body>
@@ -199,12 +211,30 @@ tbody tr:hover { background: rgba(255,255,255,0.02); }
   <h1>🛠 Quản lý mô hình giọng nói</h1>
 
   <div class="card">
-    <h2>Kết nối máy chủ RVC (Colab)</h2>
+    <h2>Kết nối máy chủ giọng nói (clone-voice-station)</h2>
+    <p style="font-size:12.5px; color:var(--gray); margin-bottom:10px;">
+      Địa chỉ mà ứng dụng này dùng để gọi tới clone-voice-station — dán URL ngrok/cloudflared mới ở đây khi demo cục bộ, không cần khởi động lại server.
+    </p>
     <div class="endpoint-row">
-      <input type="text" id="endpointInput" placeholder="https://xxxx.trycloudflare.com"/>
-      <button id="saveEndpointBtn">Lưu</button>
+      <input type="text" id="stationUrlInput" placeholder="https://xxxx.ngrok-free.app"/>
+      <button id="saveStationUrlBtn">Lưu</button>
     </div>
-    <div class="health-line" id="healthLine">Đang kiểm tra…</div>
+    <div class="health-line" id="stationHealthLine">Đang kiểm tra…</div>
+  </div>
+
+  <div class="card">
+    <h2>Nhận diện giọng nói cục bộ (Local Whisper)</h2>
+    <p style="font-size:12.5px; color:var(--gray); margin-bottom:10px;">
+      Tải file <span class="mono">.stt-pack.zip</span> từ STT Lab của clone-voice-station (<span class="mono">/stt-lab</span>, nút "Tải xuống" trên adapter đã huấn luyện xong) lên đây, rồi bật chế độ local — mic của người dùng sẽ chạy Whisper ngay trong tiến trình của app này thay vì gọi qua mạng tới clone-voice-station.
+    </p>
+    <label style="display:flex; align-items:center; gap:8px; font-size:13.5px; margin-bottom:14px; cursor:pointer;">
+      <input type="checkbox" id="sttLocalModeToggle"/> Dùng model local thay vì gọi clone-voice-station
+    </label>
+    <div class="endpoint-row" style="margin-bottom:12px;">
+      <input type="file" id="sttPackFileInput" accept=".zip"/>
+      <button id="uploadPackBtn">Tải lên</button>
+    </div>
+    <div id="sttPacksList"></div>
   </div>
 
   <div class="table-card">
@@ -236,28 +266,87 @@ function escapeHtml(s) {
   return div.innerHTML;
 }
 
-async function loadEndpoint() {
-  const data = await fetch('/admin/rvc_endpoint').then(r => r.json());
-  document.getElementById('endpointInput').value = data.endpoint || '';
-  renderHealth(data.available);
+async function loadStationUrl() {
+  const data = await fetch('/admin/station_url').then(r => r.json());
+  document.getElementById('stationUrlInput').value = data.url || '';
+  renderStationHealth(data.available);
 }
 
-function renderHealth(available) {
-  const el = document.getElementById('healthLine');
+function renderStationHealth(available) {
+  const el = document.getElementById('stationHealthLine');
   el.innerHTML = available
-    ? '<span class="health-dot up"></span>Colab RVC server đang hoạt động.'
-    : '<span class="health-dot down"></span>Không kết nối được tới Colab RVC server (giọng nói sẽ dùng TTS mặc định).';
+    ? '<span class="health-dot up"></span>Đã kết nối tới clone-voice-station.'
+    : '<span class="health-dot down"></span>Không kết nối được tới clone-voice-station ở địa chỉ này.';
 }
 
-document.getElementById('saveEndpointBtn').addEventListener('click', async () => {
-  const endpoint = document.getElementById('endpointInput').value.trim();
-  const res  = await fetch('/admin/rvc_endpoint', {
+document.getElementById('saveStationUrlBtn').addEventListener('click', async () => {
+  const url = document.getElementById('stationUrlInput').value.trim();
+  const res  = await fetch('/admin/station_url', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ endpoint })
+    body: JSON.stringify({ url })
   });
   const data = await res.json();
-  renderHealth(data.available);
+  if (data.status === 'error') { alert('❌ ' + data.message); return; }
+  renderStationHealth(data.available);
+  loadModels();
+});
+
+async function loadSttPacks() {
+  const data = await fetch('/admin/stt_local_packs').then(r => r.json());
+  document.getElementById('sttLocalModeToggle').checked = !!data.local_enabled;
+  renderSttPacks(data);
+}
+
+function renderSttPacks(data) {
+  const el = document.getElementById('sttPacksList');
+  const packs = data.packs || [];
+  if (packs.length === 0) {
+    el.innerHTML = '<div class="empty-state">Chưa có pack nào — tải lên một file .stt-pack.zip ở trên.</div>';
+    return;
+  }
+  el.innerHTML = packs.map(p => `
+    <div class="pack-row">
+      <input type="radio" name="activePack" ${p.id === data.active_id ? 'checked' : ''} data-action="activate-pack" data-id="${p.id}"/>
+      <span class="pack-label">${escapeHtml(p.label)}</span>
+      <span class="pack-meta">${p.base_model} · Tier ${p.tier}</span>
+      <button class="btn-action danger" data-action="delete-pack" data-id="${p.id}">Xoá</button>
+    </div>
+  `).join('');
+}
+
+document.getElementById('sttLocalModeToggle').addEventListener('change', async (e) => {
+  await fetch('/admin/stt_local_mode', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enabled: e.target.checked }),
+  });
+});
+
+document.getElementById('uploadPackBtn').addEventListener('click', async () => {
+  const input = document.getElementById('sttPackFileInput');
+  if (!input.files.length) { alert('Chọn một file .stt-pack.zip trước.'); return; }
+  const form = new FormData();
+  form.append('pack', input.files[0]);
+  const res  = await fetch('/admin/stt_local_packs', { method: 'POST', body: form });
+  const data = await res.json();
+  if (data.status === 'error') { alert('❌ ' + data.message); return; }
+  input.value = '';
+  await loadSttPacks();
+});
+
+document.getElementById('sttPacksList').addEventListener('click', async (e) => {
+  const actBtn = e.target.closest('[data-action="activate-pack"]');
+  if (actBtn) {
+    await fetch(`/admin/stt_local_packs/${actBtn.dataset.id}/activate`, { method: 'POST' });
+    return;
+  }
+  const delBtn = e.target.closest('[data-action="delete-pack"]');
+  if (delBtn) {
+    if (!confirm('Xoá pack này khỏi ổ đĩa?')) return;
+    await fetch(`/admin/stt_local_packs/${delBtn.dataset.id}`, { method: 'DELETE' });
+    await loadSttPacks();
+  }
 });
 
 async function loadModels() {
@@ -318,7 +407,8 @@ async function removeModel(id, name) {
 }
 
 (async function init() {
-  await loadEndpoint();
+  await loadStationUrl();
+  await loadSttPacks();
   await loadModels();
 })();
 </script>

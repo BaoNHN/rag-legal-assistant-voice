@@ -1043,7 +1043,14 @@ def _voice_error(e: VoiceStationError) -> JSONResponse:
 async def voice_status_route(request: Request):
     if not logged_in(request):
         return JSONResponse({"error": "Unauthorized"}, status_code=401)
-    return {"available": station_client.is_available()}
+    return {
+        "available": station_client.is_available(),
+        # Lets script.js's live-transcribe tick faster when transcription is
+        # local (in-process, no network hop) than when it's remote -- same
+        # local/remote-aware cadence voice-lab-example's /compare page uses
+        # (see static/script.js's LIVE_TRANSCRIBE_INTERVAL_MS).
+        "local_stt_enabled": station_client.is_stt_local_mode_enabled(),
+    }
 
 
 @app.get("/voice/scripts")
@@ -1179,16 +1186,31 @@ async def voice_profile_status_route(profile_id: int, request: Request):
 async def voice_transcribe_route(request: Request, audio: UploadFile = File(...)):
     """Speech-to-Text — input half of the voice loop (see /voice/speak below
     for the output half). Delegates to clone-voice-station's Whisper-backed
-    /api/transcribe; the returned text is just typed into chatInput
-    client-side (script.js), same as if the user had typed it themselves."""
+    /api/transcribe by default; the returned text is just typed into
+    chatInput client-side (script.js), same as if the user had typed it
+    themselves.
+
+    If an admin has enabled local STT mode (see /admin/stt_local_mode) with a
+    downloaded .stt-pack.zip from clone-voice-station's STT Lab, transcribes
+    right in this process instead (voice/station_client.transcribe_local())
+    -- no network call to clone-voice-station for this request at all. Falls
+    back to the remote path if the local one errors (e.g. the [local] extra
+    isn't installed, or the model fails to load), same degrade-gracefully
+    contract as the rest of this voice integration."""
     if not logged_in(request):
         return JSONResponse({"error": "Unauthorized"}, status_code=401)
 
     content = await audio.read()
+    filename = audio.filename or "recording.webm"
+
+    if station_client.is_stt_local_mode_enabled():
+        try:
+            return station_client.transcribe_local(filename, content, mime=audio.content_type)
+        except VoiceStationError as e:
+            print(f"[voice/transcribe] Local STT lỗi, dùng clone-voice-station thay thế: {e}")
+
     try:
-        result = station_client.transcribe(
-            audio.filename or "recording.webm", content, mime=audio.content_type,
-        )
+        result = station_client.transcribe(filename, content, mime=audio.content_type)
     except VoiceStationError as e:
         return _voice_error(e)
     return result
@@ -1267,26 +1289,79 @@ async def admin_delete_voice_model_route(profile_id: int, request: Request):
     return result
 
 
-@app.get("/admin/rvc_endpoint")
-async def admin_get_rvc_endpoint_route(request: Request):
+@app.get("/admin/stt_local_packs")
+async def admin_list_stt_local_packs_route(request: Request):
+    if not logged_in(request) or not is_admin(request):
+        return JSONResponse({"status": "error", "message": "Unauthorized"}, status_code=403)
+    return station_client.list_stt_local_packs()
+
+
+@app.post("/admin/stt_local_packs")
+async def admin_upload_stt_local_pack_route(request: Request, pack: UploadFile = File(...)):
+    """Uploads a .stt-pack.zip downloaded from clone-voice-station's STT Lab
+    (/stt-lab, "Tải xuống" on a finished adapter) so this app can run it as a
+    local Whisper model -- see voice/station_client.py's local-pack section."""
+    if not logged_in(request) or not is_admin(request):
+        return JSONResponse({"status": "error", "message": "Unauthorized"}, status_code=403)
+    content = await pack.read()
+    try:
+        entry = station_client.upload_stt_local_pack(pack.filename, content)
+    except ValueError as e:
+        return JSONResponse({"status": "error", "message": str(e)}, status_code=400)
+    return {"status": "ok", "pack": entry}
+
+
+@app.post("/admin/stt_local_packs/{pack_id}/activate")
+async def admin_activate_stt_local_pack_route(request: Request, pack_id: str):
     if not logged_in(request) or not is_admin(request):
         return JSONResponse({"status": "error", "message": "Unauthorized"}, status_code=403)
     try:
-        return station_client.get_rvc_endpoint()
-    except VoiceStationError as e:
-        return _voice_error(e)
+        station_client.set_active_stt_local_pack(pack_id)
+    except ValueError as e:
+        return JSONResponse({"status": "error", "message": str(e)}, status_code=400)
+    return {"status": "ok"}
 
 
-@app.post("/admin/rvc_endpoint")
-async def admin_set_rvc_endpoint_route(request: Request):
+@app.delete("/admin/stt_local_packs/{pack_id}")
+async def admin_delete_stt_local_pack_route(request: Request, pack_id: str):
     if not logged_in(request) or not is_admin(request):
         return JSONResponse({"status": "error", "message": "Unauthorized"}, status_code=403)
-    data     = await request.json()
-    endpoint = (data.get("endpoint") or "").strip()
     try:
-        return station_client.set_rvc_endpoint(endpoint)
-    except VoiceStationError as e:
-        return _voice_error(e)
+        station_client.delete_stt_local_pack(pack_id)
+    except ValueError as e:
+        return JSONResponse({"status": "error", "message": str(e)}, status_code=400)
+    return {"status": "ok"}
+
+
+@app.post("/admin/stt_local_mode")
+async def admin_set_stt_local_mode_route(request: Request):
+    if not logged_in(request) or not is_admin(request):
+        return JSONResponse({"status": "error", "message": "Unauthorized"}, status_code=403)
+    data = await request.json()
+    station_client.set_stt_local_mode(bool(data.get("enabled")))
+    return {"status": "ok"}
+
+
+@app.get("/admin/station_url")
+async def admin_get_station_url_route(request: Request):
+    """Which clone-voice-station instance this app itself talks to. Configuring
+    clone-voice-station's own downstream Colab/RVC tunnel is out of scope here --
+    that's managed directly on clone-voice-station's own manager dashboard, not
+    proxied through this app."""
+    if not logged_in(request) or not is_admin(request):
+        return JSONResponse({"status": "error", "message": "Unauthorized"}, status_code=403)
+    return {"url": station_client.get_station_url(), "available": station_client.is_available()}
+
+
+@app.post("/admin/station_url")
+async def admin_set_station_url_route(request: Request):
+    if not logged_in(request) or not is_admin(request):
+        return JSONResponse({"status": "error", "message": "Unauthorized"}, status_code=403)
+    data = await request.json()
+    try:
+        return station_client.set_station_url(data.get("url"))
+    except ValueError as e:
+        return JSONResponse({"status": "error", "message": str(e)}, status_code=400)
 
 
 # ── Voice: notifications (manager-triggered delete/disable → this user) ────────

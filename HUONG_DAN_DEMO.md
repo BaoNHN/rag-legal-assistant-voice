@@ -98,6 +98,8 @@ pip install -r requirements.txt
 
 Thư viện giọng nói (`edge-tts`, `python-docx`, v.v.) đã gộp chung vào `requirements.txt` — không cần file riêng.
 
+> **Bắt buộc: thư mục `clone-voice-client` phải nằm cùng cấp với project này** (`../clone-voice-client`). `requirements.txt` có dòng `-e ../clone-voice-client[local]` — lệnh `pip install` ở trên tự cài thư viện đó (dạng editable) từ thư mục anh em này, không phải từ PyPI. Thiếu thư mục `clone-voice-client`, bước cài đặt trên sẽ báo lỗi ngay, và app không chạy được. Xem đầy đủ các câu lệnh terminal + ngrok cho cả 4 project liên quan (`clone-voice-station`, `clone-voice-client`, `rag-legal-assistant`, `voice-lab-example`) tại [`HUONG_DAN_CHAY_TOAN_HE_THONG.md`](./HUONG_DAN_CHAY_TOAN_HE_THONG.md).
+
 ### 2.3 Cấu Hình API Key
 
 Tạo file `groqkey.txt` tại thư mục gốc dự án, dán API key vào:

@@ -4,15 +4,17 @@ numpy==1.26.4
 # LangChain (modern ecosystem)
 langchain==0.2.14
 langchain-core==0.2.32
-langchain-community==0.2.12
 langsmith==0.1.120
 
 # New split packages (NO deprecated)
 langchain-huggingface==0.0.3
 langchain-chroma==0.1.2
 
-# Groq
+# Groq — langchain-groq wraps the groq SDK for ask_rag(); engine/groq_keys.py
+# also imports the groq SDK directly (from groq import RateLimitError) for
+# multi-key rotation on rate limits, so it's pinned explicitly here too.
 langchain-groq==0.1.9
+groq>=0.9.0
 
 # Vector DB
 chromadb==0.4.24
@@ -39,11 +41,15 @@ python-multipart>=0.0.9
 jinja2>=3.1.4
 itsdangerous>=2.1.2
 
-# Tokenizer
-tiktoken==0.7.0
-
 # datasets
 datasets==2.19.1
+
+# Data handling — pandas is imported directly (evaluate_rag.py,
+# evaluate_engine.py, import_dataset_engine.py, _excel_row_reader.py,
+# database/build_db_from_dataset*.py); tqdm is imported directly
+# (engine/evaluate_engine.py progress bars)
+pandas>=2.0.0
+tqdm>=4.66.0
 
 # Excel support (for build_db_from_dataset.py and evaluate_rag.py)
 openpyxl==3.1.5
@@ -53,6 +59,10 @@ vietocr==0.3.13
 pdf2image==1.17.0
 # opencv for accurate text line detection (headless = no GUI needed)
 opencv-python-headless==4.11.0.86
+# Pillow — imported directly (from PIL import ImageEnhance) in
+# database/build_db_from_pdf.py and engine/import_law_engine.py for OCR
+# pre-processing
+Pillow>=10.0.0
 
 # Word document support
 python-docx>=1.1.2
@@ -60,8 +70,18 @@ python-docx>=1.1.2
 # Voice feature — talks to clone-voice-station (separate service) via the
 # installable clone-voice-client SDK (sibling project, see
 # voice/station_client.py, now a thin adapter over this package).
--e ../clone-voice-client
+# [local] extra (added 2026-08-12) pulls in openai-whisper/transformers/peft
+# for the local-STT-pack feature (admin_voice_models.html's "Nhận diện giọng
+# nói cục bộ" box, voice/station_client.py's transcribe_local()) — running
+# Whisper right in this process from a downloaded .stt-pack.zip instead of
+# always calling clone-voice-station over the network. torch itself is
+# already required above (bge-m3 embeddings), not pulled in twice.
+-e ../clone-voice-client[local]
 requests>=2.31.0
 
 # start_ngrok.py -- demo-only public tunnel, temporary stand-in until real deployment
 ngrok>=1.7.0
+
+# thesis_diagrams/gen_fig1_pipeline.py, gen_fig2_architecture.py -- optional,
+# only needed to regenerate the thesis figures, not required by the running app
+matplotlib>=3.8.0
