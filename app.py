@@ -139,7 +139,10 @@ async def login_page(request: Request):
 
 @app.get("/voice", response_class=HTMLResponse)
 async def voice_page(request: Request):
-    if not logged_in(request):
+    # Voice cloning is Teacher/Admin only -- students can still pick a
+    # builtin voice from the chat's "Giọng đọc" selector and use /voice/speak,
+    # they just can't create/manage a personal cloned voice.
+    if not logged_in(request) or not is_teacher(request):
         return RedirectResponse("/", status_code=302)
     return templates.TemplateResponse(request, "voice_profile.html", {
         "min_samples": MIN_TRAIN_SAMPLES,
@@ -1060,25 +1063,40 @@ async def voice_scripts_route(request: Request):
     return station_client.get_scripts()
 
 
-@app.get("/voice/profiles")
-async def voice_profiles_route(request: Request):
+# Voice cloning (create/train/manage a personal voice) is Teacher/Admin only
+# -- everything below returns the *_role_gate() response as soon as it's
+# non-None. 401 (not logged in at all) is kept distinct from 403 (logged in
+# as a student) since they mean different things to the caller.
+def _voice_role_gate(request: Request):
     if not logged_in(request):
         return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    if not is_teacher(request):
+        return JSONResponse(
+            {"status": "error", "message": "Chỉ giảng viên và quản trị viên mới có thể tạo/quản lý giọng nói."},
+            status_code=403,
+        )
+    return None
+
+
+@app.get("/voice/profiles")
+async def voice_profiles_route(request: Request):
+    if (gate := _voice_role_gate(request)) is not None:
+        return gate
     return station_client.list_voice_profiles(str(request.session["user_id"]))
 
 
 @app.post("/voice/consent")
 async def voice_consent_route(request: Request):
-    if not logged_in(request):
-        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    if (gate := _voice_role_gate(request)) is not None:
+        return gate
     station_client.record_voice_consent(str(request.session["user_id"]))
     return {"status": "ok"}
 
 
 @app.post("/voice/profiles")
 async def create_voice_profile_route(request: Request):
-    if not logged_in(request):
-        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    if (gate := _voice_role_gate(request)) is not None:
+        return gate
     external_user_id = str(request.session["user_id"])
 
     data = await request.json()
@@ -1095,8 +1113,8 @@ async def create_voice_profile_route(request: Request):
 
 @app.put("/voice/profiles/{profile_id}")
 async def update_voice_profile_route(profile_id: int, request: Request):
-    if not logged_in(request):
-        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    if (gate := _voice_role_gate(request)) is not None:
+        return gate
     external_user_id = str(request.session["user_id"])
     data             = await request.json()
     try:
@@ -1111,8 +1129,8 @@ async def update_voice_profile_route(profile_id: int, request: Request):
 
 @app.delete("/voice/profiles/{profile_id}")
 async def delete_voice_profile_route(profile_id: int, request: Request):
-    if not logged_in(request):
-        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    if (gate := _voice_role_gate(request)) is not None:
+        return gate
     try:
         result = station_client.delete_voice_profile(profile_id, str(request.session["user_id"]))
     except VoiceStationError as e:
@@ -1127,8 +1145,8 @@ async def upload_voice_sample_route(
     script_id: str = Form(...),
     audio: UploadFile = File(...),
 ):
-    if not logged_in(request):
-        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    if (gate := _voice_role_gate(request)) is not None:
+        return gate
     content = await audio.read()
     try:
         result = station_client.upload_voice_sample(
@@ -1142,8 +1160,8 @@ async def upload_voice_sample_route(
 
 @app.get("/voice/profiles/{profile_id}/samples")
 async def list_voice_samples_route(profile_id: int, request: Request):
-    if not logged_in(request):
-        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    if (gate := _voice_role_gate(request)) is not None:
+        return gate
     try:
         return station_client.list_voice_samples(profile_id, str(request.session["user_id"]))
     except VoiceStationError as e:
@@ -1152,8 +1170,8 @@ async def list_voice_samples_route(profile_id: int, request: Request):
 
 @app.delete("/voice/profiles/{profile_id}/samples/{sample_id}")
 async def delete_voice_sample_route(profile_id: int, sample_id: int, request: Request):
-    if not logged_in(request):
-        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    if (gate := _voice_role_gate(request)) is not None:
+        return gate
     try:
         station_client.delete_voice_sample(profile_id, sample_id, str(request.session["user_id"]))
     except VoiceStationError as e:
@@ -1163,8 +1181,8 @@ async def delete_voice_sample_route(profile_id: int, sample_id: int, request: Re
 
 @app.post("/voice/profiles/{profile_id}/train")
 async def train_voice_profile_route(profile_id: int, request: Request):
-    if not logged_in(request):
-        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    if (gate := _voice_role_gate(request)) is not None:
+        return gate
     try:
         result = station_client.train_voice_profile(profile_id, str(request.session["user_id"]))
     except VoiceStationError as e:
@@ -1174,8 +1192,8 @@ async def train_voice_profile_route(profile_id: int, request: Request):
 
 @app.get("/voice/profiles/{profile_id}/status")
 async def voice_profile_status_route(profile_id: int, request: Request):
-    if not logged_in(request):
-        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    if (gate := _voice_role_gate(request)) is not None:
+        return gate
     try:
         return station_client.get_voice_profile_status(profile_id, str(request.session["user_id"]))
     except VoiceStationError as e:

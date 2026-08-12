@@ -78,7 +78,7 @@
     .btn-manage-law.visible { display: block; }
 
     .btn-my-voice {
-      display: block;
+      display: none;
       width: 90%;
       margin-right: 30px;
       margin-top: 8px;
@@ -98,7 +98,7 @@
       background: #40414a;
       border-color: #0DB4A2;
     }
-    .btn-my-voice.hidden { display: none; }
+    .btn-my-voice.visible { display: block; }
     #micButton.hidden { display: none; }
 
     .btn-admin-voice {
@@ -233,7 +233,7 @@
       <a href="/manage_law" class="btn-manage-law" id="manageLawBtn">
         🗂️ Quản lý văn bản luật
       </a>
-      <!-- My Voice — hidden for guests (no account to attach a cloned voice to) -->
+      <!-- My Voice — Teacher/Admin only (voice cloning), shown via JS -->
       <a href="/voice" class="btn-my-voice" id="myVoiceBtn">
         🎙 Giọng nói của tôi
       </a>
@@ -322,7 +322,6 @@
         <div class="voice-select-bar" id="voiceSelectBar">
           <span>🔊 Giọng đọc:</span>
           <select id="voiceProfileSelect"></select>
-          <a href="/voice">Quản lý giọng nói của tôi →</a>
         </div>
         <div class="input-area">
           <input id="chatInput" type="text" placeholder="Nhập câu hỏi về Luật Doanh nghiệp…"/>
@@ -379,7 +378,6 @@ window.isGuest = false;
       notice.textContent = "Khách — giới hạn 15 câu/phiên";
       notice.style.display = "block";
       // Voice (audio clone) features need an account — hide for guests.
-      document.getElementById("myVoiceBtn").classList.add("hidden");
       document.getElementById("notifWrap").classList.add("hidden");
       document.getElementById("voiceSelectBar").classList.add("hidden");
       document.getElementById("micButton").classList.add("hidden");
@@ -388,6 +386,8 @@ window.isGuest = false;
 
     if (data.user_type === "teacher" || data.user_type === "admin") {
       document.getElementById("importLawBtn").classList.add("visible");
+      // Voice cloning (create/manage a personal voice) is Teacher/Admin only.
+      document.getElementById("myVoiceBtn").classList.add("visible");
     }
     if (data.user_type === "admin") {
       document.getElementById("manageAccountBtn").classList.add("visible");
