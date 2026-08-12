@@ -237,7 +237,6 @@ let _recordingChunks = [];
 let _liveTranscribeTimer = null;
 let _liveTranscribeInFlight = false;
 let _lastLiveTranscript = null;
-let _liveTranscribeIntervalMs = LIVE_TRANSCRIBE_INTERVAL_REMOTE_MS; // set per-recording in micButton's click handler below
 
 // Local (in-process, no network hop) can afford a tighter tick than remote
 // (an HTTP round trip to clone-voice-station plus its own inference) — same
@@ -248,6 +247,8 @@ let _liveTranscribeIntervalMs = LIVE_TRANSCRIBE_INTERVAL_REMOTE_MS; // set per-r
 // effect on the very next recording, no reload needed.
 const LIVE_TRANSCRIBE_INTERVAL_LOCAL_MS  = 1000;
 const LIVE_TRANSCRIBE_INTERVAL_REMOTE_MS = 2000;
+
+let _liveTranscribeIntervalMs = LIVE_TRANSCRIBE_INTERVAL_REMOTE_MS; // set per-recording in micButton's click handler below
 
 // Stale-response guard: a live tick's request and the final stop-triggered
 // request can both be in flight at once (stopping the recorder doesn't
