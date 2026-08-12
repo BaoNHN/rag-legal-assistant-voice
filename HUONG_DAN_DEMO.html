@@ -1,0 +1,1418 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Huong Dan Demo - RAG Legal Assistant</title>
+<style>
+  :root {
+    --bg: #ffffff; --bg-alt: #f6f7f9; --text: #1c1f26; --text-dim: #5b6270;
+    --border: #e2e5ea; --accent: #2e5aac; --accent-soft: #eaf0fb;
+    --code-bg: #1c1f26; --code-text: #e8eaf0;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14161a; --bg-alt: #1b1e24; --text: #e7e9ee; --text-dim: #9aa1ae;
+      --border: #2b2f38; --accent: #7fa6f5; --accent-soft: #1e2a42;
+      --code-bg: #0d0f13; --code-text: #e8eaf0;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif; line-height: 1.6; }
+  .layout { display: grid; grid-template-columns: 280px minmax(0, 1fr); max-width: 1200px; margin: 0 auto; }
+  @media (max-width: 860px) {
+    .layout { grid-template-columns: 1fr; }
+    nav.toc { position: static !important; border-right: none !important; border-bottom: 1px solid var(--border); }
+  }
+  nav.toc { position: sticky; top: 0; align-self: start; height: 100vh; overflow-y: auto;
+    padding: 28px 18px; border-right: 1px solid var(--border); background: var(--bg-alt); }
+  nav.toc .toclabel { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--text-dim); margin: 0 0 12px; }
+  nav.toc ul { list-style: none; margin: 0; padding-left: 14px; }
+  nav.toc > ul { padding-left: 0; }
+  nav.toc li { margin: 1px 0; }
+  nav.toc a { display: block; padding: 6px 10px; border-radius: 6px; color: var(--text);
+    text-decoration: none; font-size: 13.5px; }
+  nav.toc a:hover { background: var(--accent-soft); color: var(--accent); }
+  main { padding: 40px 44px 100px; min-width: 0; }
+  main > .subtitle { color: var(--text-dim); margin: -4px 0 32px; font-size: 15px; }
+  h1 { font-size: 26px; margin: 0 0 6px; }
+  h2 { font-size: 20px; margin: 44px 0 14px; padding-top: 8px; border-top: 1px solid var(--border); }
+  main > h2:first-of-type { border-top: none; margin-top: 0; }
+  h3 { font-size: 16.5px; margin: 26px 0 8px; }
+  h4 { font-size: 14.5px; margin: 18px 0 6px; color: var(--text-dim); }
+  p { margin: 10px 0; }
+  a { color: var(--accent); }
+  code { background: var(--bg-alt); border: 1px solid var(--border); padding: 1px 6px;
+    border-radius: 4px; font-size: 13px; font-family: "Cascadia Code", Consolas, "Courier New", monospace; }
+  pre { background: var(--code-bg); color: var(--code-text); padding: 14px 16px; border-radius: 8px;
+    overflow-x: auto; font-size: 13px; line-height: 1.55;
+    font-family: "Cascadia Code", Consolas, "Courier New", monospace; }
+  pre code { background: none; border: none; padding: 0; color: inherit; }
+  ul, ol { padding-left: 22px; }
+  li { margin: 4px 0; }
+  table { border-collapse: collapse; width: 100%; margin: 12px 0 20px; font-size: 13.5px; display: block; overflow-x: auto; }
+  th, td { border: 1px solid var(--border); padding: 8px 10px; text-align: left; vertical-align: top; }
+  th { background: var(--bg-alt); }
+  blockquote { margin: 14px 0; padding: 10px 16px; border-left: 3px solid var(--accent);
+    background: var(--accent-soft); border-radius: 0 8px 8px 0; }
+  blockquote p { margin: 4px 0; }
+  hr { border: none; border-top: 1px solid var(--border); margin: 32px 0; }
+  img { max-width: 100%; border-radius: 8px; border: 1px solid var(--border); }
+  footer { margin-top: 60px; padding-top: 18px; border-top: 1px solid var(--border);
+    color: var(--text-dim); font-size: 12.5px; }
+</style>
+</head>
+<body>
+<div class="layout">
+  <nav class="toc">
+    <p class="toclabel">Muc luc</p>
+    <div class="toc">
+<ul>
+<li><a href="#huong-dan-demo-rag-legal-assistant">Hướng Dẫn Demo — RAG Legal Assistant</a><ul>
+<li><a href="#muc-luc">Mục Lục</a></li>
+<li><a href="#1-tong-quan-he-thong">1. Tổng Quan Hệ Thống</a><ul>
+<li><a href="#stack-cong-nghe">Stack Công Nghệ</a></li>
+<li><a href="#pipeline-rag-khi-hoc-sinhgiao-vien-at-cau-hoi">Pipeline RAG (khi học sinh/giáo viên đặt câu hỏi)</a></li>
+</ul>
+</li>
+<li><a href="#2-yeu-cau-cai-at">2. Yêu Cầu &amp; Cài Đặt</a><ul>
+<li><a href="#21-phan-mem-can-co">2.1 Phần Mềm Cần Có</a></li>
+<li><a href="#22-cai-at-thu-vien">2.2 Cài Đặt Thư Viện</a></li>
+<li><a href="#23-cau-hinh-api-key">2.3 Cấu Hình API Key</a></li>
+<li><a href="#24-kiem-tra-nhanh">2.4 Kiểm Tra Nhanh</a></li>
+</ul>
+</li>
+<li><a href="#3-khoi-ong-ung-dung">3. Khởi Động Ứng Dụng</a></li>
+<li><a href="#4-vai-tro-tai-khoan">4. Vai Trò &amp; Tài Khoản</a><ul>
+<li><a href="#tai-khoan-mac-inh">Tài Khoản Mặc Định</a></li>
+<li><a href="#cac-buoc-demo-ang-nhap">Các Bước Demo Đăng Nhập</a></li>
+</ul>
+</li>
+<li><a href="#5-demo-hoi-ap-phap-ly-vai-tro-hoc-sinh">5. Demo Hỏi Đáp Pháp Lý — Vai Trò Học Sinh</a><ul>
+<li><a href="#buoc-1-tao-cuoc-tro-chuyen-moi">Bước 1: Tạo Cuộc Trò Chuyện Mới</a></li>
+<li><a href="#buoc-2-at-cau-hoi">Bước 2: Đặt Câu Hỏi</a></li>
+<li><a href="#buoc-3-quan-ly-cuoc-tro-chuyen">Bước 3: Quản Lý Cuộc Trò Chuyện</a></li>
+</ul>
+</li>
+<li><a href="#6-demo-nhap-van-ban-luat-pdf-docx-vai-tro-giao-vien">6. Demo Nhập Văn Bản Luật (PDF / DOCX) — Vai Trò Giáo Viên</a><ul>
+<li><a href="#buoc-1-truy-cap-trang-import">Bước 1: Truy Cập Trang Import</a></li>
+<li><a href="#buoc-2-ien-thong-tin-va-upload">Bước 2: Điền Thông Tin và Upload</a></li>
+<li><a href="#buoc-3-quy-trinh-xu-ly-nen">Bước 3: Quy Trình Xử Lý Nền</a></li>
+<li><a href="#buoc-4-theo-doi-tien-trinh">Bước 4: Theo Dõi Tiến Trình</a></li>
+<li><a href="#luu-y-quan-trong">Lưu Ý Quan Trọng</a></li>
+</ul>
+</li>
+<li><a href="#7-demo-nhap-van-ban-tinh-huong-docx-vai-tro-giao-vien">7. Demo Nhập Văn Bản Tình Huống (DOCX) — Vai Trò Giáo Viên</a><ul>
+<li><a href="#buoc-1-chuyen-sang-tab-tinh-huong">Bước 1: Chuyển Sang Tab Tình Huống</a></li>
+<li><a href="#buoc-2-chuan-bi-file-upload">Bước 2: Chuẩn Bị File &amp; Upload</a></li>
+<li><a href="#buoc-3-quy-trinh-xu-ly-nen_1">Bước 3: Quy Trình Xử Lý Nền</a></li>
+<li><a href="#luu-y-quan-trong_1">Lưu Ý Quan Trọng</a></li>
+</ul>
+</li>
+<li><a href="#8-demo-import-dataset-excel-vai-tro-giao-vien">8. Demo Import Dataset Excel — Vai Trò Giáo Viên</a><ul>
+<li><a href="#buoc-1-chuyen-sang-tab-dataset">Bước 1: Chuyển Sang Tab Dataset</a></li>
+<li><a href="#buoc-2-upload-file">Bước 2: Upload File</a></li>
+<li><a href="#buoc-3-quy-trinh-xu-ly-nen_2">Bước 3: Quy Trình Xử Lý Nền</a></li>
+</ul>
+</li>
+<li><a href="#9-demo-anh-gia-he-thong-rag-vai-tro-giao-vien">9. Demo Đánh Giá Hệ Thống RAG — Vai Trò Giáo Viên</a><ul>
+<li><a href="#buoc-0-ket-qua-lan-gan-nhat-tu-hien-khi-mo-tab">Bước 0: Kết Quả Lần Gần Nhất Tự Hiện Khi Mở Tab</a></li>
+<li><a href="#buoc-1-chon-file-dataset">Bước 1: Chọn File Dataset</a></li>
+<li><a href="#buoc-2-chon-che-o-anh-gia">Bước 2: Chọn Chế Độ Đánh Giá</a></li>
+<li><a href="#buoc-3-theo-doi-tien-trinh-ket-qua">Bước 3: Theo Dõi Tiến Trình &amp; Kết Quả</a></li>
+<li><a href="#luu-y-ve-o-chinh-xac-cua-cham-iem-auto-mode">Lưu Ý Về Độ Chính Xác Của Chấm Điểm auto Mode</a></li>
+</ul>
+</li>
+<li><a href="#10-demo-quan-ly-tai-khoan-vai-tro-admin">10. Demo Quản Lý Tài Khoản — Vai Trò Admin</a><ul>
+<li><a href="#buoc-1-truy-cap-trang-quan-ly">Bước 1: Truy Cập Trang Quản Lý</a></li>
+<li><a href="#buoc-2-thao-tac-tren-tung-tai-khoan">Bước 2: Thao Tác Trên Từng Tài Khoản</a></li>
+<li><a href="#buoc-3-import-hang-loat-tai-khoan">Bước 3: Import Hàng Loạt Tài Khoản</a></li>
+</ul>
+</li>
+<li><a href="#11-demo-quan-ly-van-ban-manage-law-vai-tro-admin">11. Demo Quản Lý Văn Bản (Manage Law) — Vai Trò Admin</a><ul>
+<li><a href="#buoc-1-truy-cap-trang-quan-ly_1">Bước 1: Truy Cập Trang Quản Lý</a></li>
+<li><a href="#buoc-2-chuyen-tab-xoa-du-lieu">Bước 2: Chuyển Tab &amp; Xoá Dữ Liệu</a></li>
+</ul>
+</li>
+<li><a href="#12-demo-tinh-nang-giong-noi">12. Demo Tính Năng Giọng Nói</a><ul>
+<li><a href="#121-oc-to-cau-tra-loi-tts">12.1 Đọc To Câu Trả Lời (TTS)</a></li>
+<li><a href="#122-tao-giong-noi-ca-nhan-rvc">12.2 Tạo Giọng Nói Cá Nhân (RVC)</a></li>
+<li><a href="#123-quan-ly-giong-noi-vai-tro-admin">12.3 Quản Lý Giọng Nói — Vai Trò Admin</a></li>
+<li><a href="#124-cau-hinh-endpoint-rvc-colab">12.4 Cấu Hình Endpoint RVC (Colab)</a></li>
+</ul>
+</li>
+<li><a href="#13-cau-hoi-demo-goi-y">13. Câu Hỏi Demo Gợi Ý</a><ul>
+<li><a href="#cau-hoi-inh-nghia-definition">Câu Hỏi Định Nghĩa (definition)</a></li>
+<li><a href="#cau-hoi-ieu-kien-condition">Câu Hỏi Điều Kiện (condition)</a></li>
+<li><a href="#cau-hoi-thu-tuc-procedure">Câu Hỏi Thủ Tục (procedure)</a></li>
+<li><a href="#cau-hoi-tong-quat-general">Câu Hỏi Tổng Quát (general)</a></li>
+<li><a href="#cau-hoi-tinh-huong-minh-hoa-du-lieu-tu-muc-7">Câu Hỏi Tình Huống (minh hoạ dữ liệu từ mục 7)</a></li>
+<li><a href="#cau-hoi-meta-ve-he-thong">Câu Hỏi Meta Về Hệ Thống</a></li>
+<li><a href="#cau-hoi-ngoai-pham-vi-e-minh-hoa-co-che-tu-choi">Câu Hỏi Ngoài Phạm Vi (để minh họa cơ chế từ chối)</a></li>
+</ul>
+</li>
+<li><a href="#14-kien-truc-ky-thuat">14. Kiến Trúc Kỹ Thuật</a><ul>
+<li><a href="#141-cau-truc-thu-muc">14.1 Cấu Trúc Thư Mục</a></li>
+<li><a href="#142-api-endpoints">14.2 API Endpoints</a></li>
+<li><a href="#143-phan-loai-cau-hoi-rag">14.3 Phân Loại Câu Hỏi RAG</a></li>
+<li><a href="#144-whitelist-trich-dan-citation_source-nhan-nguon-goc-import_source">14.4 Whitelist Trích Dẫn (CITATION_SOURCE) &amp; Nhãn Nguồn Gốc (import_source)</a></li>
+<li><a href="#145-giong-noi-voice_profiles-voice_samples-app_settings">14.5 Giọng Nói: voice_profiles / voice_samples / app_settings</a></li>
+<li><a href="#146-schema-database-sqlite">14.6 Schema Database SQLite</a></li>
+</ul>
+</li>
+<li><a href="#15-xu-ly-su-co">15. Xử Lý Sự Cố</a><ul>
+<li><a href="#loi-khong-ket-noi-groq">Lỗi Không Kết Nối Groq</a></li>
+<li><a href="#chromadb-trong-khong-tim-thay-ket-qua">ChromaDB Trống — Không Tìm Thấy Kết Quả</a></li>
+<li><a href="#ocr-chay-cham">OCR Chạy Chậm</a></li>
+<li><a href="#loi-poppler-khong-tim-thay">Lỗi Poppler Không Tìm Thấy</a></li>
+<li><a href="#loi-ang-nhap-that-bai">Lỗi Đăng Nhập Thất Bại</a></li>
+<li><a href="#anh-gia-rag-dung-sai-dataset">Đánh Giá RAG Dùng Sai Dataset</a></li>
+<li><a href="#quick-evaluation-bi-disable-bao-loi-khong-co-sheet-demo">Quick Evaluation Bị Disable / Báo Lỗi "Không Có Sheet Demo"</a></li>
+<li><a href="#tra-loi-sai-noi-dung-trich-dan-sai-ieu-luat-vd-hoi-ieu-143-ra-noi-dung-ieu-khac">Trả Lời Sai Nội Dung / Trích Dẫn Sai Điều Luật (VD: hỏi "Điều 143" ra nội dung Điều khác)</a></li>
+<li><a href="#iem-anh-gia-auto-mode-thap-bat-thuong-du-cau-tra-loi-ung">Điểm Đánh Giá auto Mode Thấp Bất Thường Dù Câu Trả Lời Đúng</a></li>
+<li><a href="#khong-tao-uoc-khong-huan-luyen-uoc-giong-noi-ca-nhan">Không Tạo Được / Không Huấn Luyện Được Giọng Nói Cá Nhân</a></li>
+</ul>
+</li>
+<li><a href="#ghi-chu-them">Ghi Chú Thêm</a></li>
+</ul>
+</li>
+</ul>
+</div>
+
+  </nav>
+  <main>
+    <h1 id="huong-dan-demo-rag-legal-assistant">Hướng Dẫn Demo — RAG Legal Assistant</h1>
+<blockquote>
+<p>Hệ thống trợ lý pháp lý thông minh sử dụng kỹ thuật <strong>RAG (Retrieval-Augmented Generation)</strong>, hỗ trợ tra cứu văn bản luật bằng ngôn ngữ tự nhiên, kèm tính năng đọc to câu trả lời bằng giọng nói tiếng Việt (TTS) và nhân bản giọng nói cá nhân.</p>
+</blockquote>
+<hr />
+<h2 id="muc-luc">Mục Lục</h2>
+<ol>
+<li><a href="#1-tổng-quan-hệ-thống">Tổng Quan Hệ Thống</a></li>
+<li><a href="#2-yêu-cầu--cài-đặt">Yêu Cầu &amp; Cài Đặt</a></li>
+<li><a href="#3-khởi-động-ứng-dụng">Khởi Động Ứng Dụng</a></li>
+<li><a href="#4-vai-trò--tài-khoản">Vai Trò &amp; Tài Khoản</a></li>
+<li><a href="#5-demo-hỏi-đáp-pháp-lý--vai-trò-học-sinh">Demo Hỏi Đáp Pháp Lý — Vai Trò Học Sinh</a></li>
+<li><a href="#6-demo-nhập-văn-bản-luật-pdf--docx--vai-trò-giáo-viên">Demo Nhập Văn Bản Luật (PDF / DOCX) — Vai Trò Giáo Viên</a></li>
+<li><a href="#7-demo-nhập-văn-bản-tình-huống-docx--vai-trò-giáo-viên">Demo Nhập Văn Bản Tình Huống (DOCX) — Vai Trò Giáo Viên</a></li>
+<li><a href="#8-demo-import-dataset-excel--vai-trò-giáo-viên">Demo Import Dataset Excel — Vai Trò Giáo Viên</a></li>
+<li><a href="#9-demo-đánh-giá-hệ-thống-rag--vai-trò-giáo-viên">Demo Đánh Giá Hệ Thống RAG — Vai Trò Giáo Viên</a></li>
+<li><a href="#10-demo-quản-lý-tài-khoản--vai-trò-admin">Demo Quản Lý Tài Khoản — Vai Trò Admin</a></li>
+<li><a href="#11-demo-quản-lý-văn-bản-manage-law--vai-trò-admin">Demo Quản Lý Văn Bản (Manage Law) — Vai Trò Admin</a></li>
+<li><a href="#12-demo-tính-năng-giọng-nói">Demo Tính Năng Giọng Nói</a></li>
+<li><a href="#13-câu-hỏi-demo-gợi-ý">Câu Hỏi Demo Gợi Ý</a></li>
+<li><a href="#14-kiến-trúc-kỹ-thuật">Kiến Trúc Kỹ Thuật</a></li>
+<li><a href="#15-xử-lý-sự-cố">Xử Lý Sự Cố</a></li>
+</ol>
+<hr />
+<h2 id="1-tong-quan-he-thong">1. Tổng Quan Hệ Thống</h2>
+<h3 id="stack-cong-nghe">Stack Công Nghệ</h3>
+<table>
+<thead>
+<tr>
+<th>Thành phần</th>
+<th>Công nghệ</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Backend</td>
+<td>FastAPI (Python 3.10+), chạy bằng Uvicorn</td>
+</tr>
+<tr>
+<td>Vector Database</td>
+<td>ChromaDB</td>
+</tr>
+<tr>
+<td>Embedding Model</td>
+<td><code>BAAI/bge-small-en-v1.5</code> (HuggingFace)</td>
+</tr>
+<tr>
+<td>LLM</td>
+<td>Groq — <code>llama-3.1-8b-instant</code></td>
+</tr>
+<tr>
+<td>OCR tiếng Việt</td>
+<td>VietOCR (<code>vgg_transformer</code>)</td>
+</tr>
+<tr>
+<td>Trích xuất PDF/DOCX</td>
+<td>pypdf (text số) + pdf2image/Poppler (OCR scan) + python-docx</td>
+</tr>
+<tr>
+<td>Nhận diện dòng văn bản</td>
+<td>OpenCV</td>
+</tr>
+<tr>
+<td>Xử lý Excel</td>
+<td>pandas + openpyxl</td>
+</tr>
+<tr>
+<td>TTS (văn bản → giọng đọc)</td>
+<td>edge-TTS (Microsoft Neural), giọng mặc định <code>vi-VN-NamMinhNeural</code></td>
+</tr>
+<tr>
+<td>Nhân bản giọng nói (tùy chọn)</td>
+<td>RVC (Real-time Voice Conversion), huấn luyện/chạy trên Colab (<code>colab/voice_server.ipynb</code>) qua tunnel</td>
+</tr>
+<tr>
+<td>Database ứng dụng</td>
+<td>SQLite (<code>chat.db</code>)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="pipeline-rag-khi-hoc-sinhgiao-vien-at-cau-hoi">Pipeline RAG (khi học sinh/giáo viên đặt câu hỏi)</h3>
+<pre><code>[1] Câu hỏi người dùng
+       ↓
+[2] Kiểm tra ngoài phạm vi (ly hôn, hình sự, đất đai, thuế…) → từ chối sớm nếu không thuộc Luật Doanh nghiệp
+       ↓
+[3] Kiểm tra câu hỏi &quot;meta&quot; về hệ thống (VD: &quot;database đang lưu bao nhiêu điều luật?&quot;) → trả lời trực tiếp, bỏ qua RAG
+       ↓
+[4] Trích xuất chủ đề (topic extraction)
+     → Nếu nhận ra chủ đề: bỏ qua bước viết lại → tiết kiệm 1 lần gọi API
+       ↓
+[5] Viết lại câu hỏi (query rewrite) — chỉ khi không trích được chủ đề
+       ↓
+[6] Tìm kiếm ngữ nghĩa trong ChromaDB (topic-aware retrieval)
+     → Ưu tiên khớp metadata theo chủ đề, fallback sang semantic search có ngưỡng độ tương đồng
+       ↓
+[7] Xếp hạng lại tài liệu (rerank)
+     → Tính điểm từ: từ khóa + cụm từ + số điều luật + nguồn KB
+       ↓
+[8] Phân loại câu hỏi (definition / condition / procedure / general)
+       ↓
+[9] Xây dựng prompt có căn cứ pháp lý + gọi Groq LLM (có retry tự động khi rate-limit)
+       ↓
+[10] Làm sạch câu trả lời (loại bỏ chào hỏi, dòng trùng lặp)
+       ↓
+[11] Gắn trích dẫn điều luật chính + nguồn tham khảo phụ (📖/📎) + đường dẫn vbpl.vn
+        → Trích dẫn (so_ky_hieu) chỉ được in ra nếu đang thực sự có mặt trong ChromaDB
+          lúc đó (whitelist CITATION_SOURCE, xem mục 14.4) — chống trích dẫn &quot;ma&quot; từ
+          văn bản đã bị xoá hoặc chưa từng được import
+       ↓
+[12] (Tùy chọn) Người dùng nhấn nút 🔊 đọc to — văn bản câu trả lời được gửi qua
+        TTS/RVC (mục 12), không đi lại qua pipeline RAG
+</code></pre>
+<p>Hệ thống nạp dữ liệu vào ChromaDB qua <strong>3 luồng import</strong> độc lập, cùng dùng chung một vector store: <strong>Văn bản luật</strong> (mục 6), <strong>Văn bản tình huống</strong> (mục 7), <strong>Dataset Excel</strong> (mục 8). Admin quản lý cả ba qua trang <strong>Manage Law</strong> (mục 11).</p>
+<hr />
+<h2 id="2-yeu-cau-cai-at">2. Yêu Cầu &amp; Cài Đặt</h2>
+<h3 id="21-phan-mem-can-co">2.1 Phần Mềm Cần Có</h3>
+<ul>
+<li><strong>Python 3.10+</strong></li>
+<li><strong>Poppler</strong> — đã có sẵn trong thư mục <code>poppler/</code> của dự án (dùng khi OCR PDF scan)</li>
+<li><strong>ffmpeg</strong> — cần thêm vào PATH hệ thống (dùng bởi edge-TTS/RVC cho tính năng giọng nói)</li>
+<li><strong>Groq API key</strong> — đăng ký miễn phí tại https://console.groq.com</li>
+</ul>
+<h3 id="22-cai-at-thu-vien">2.2 Cài Đặt Thư Viện</h3>
+<pre><code class="language-bash">pip install -r requirements.txt
+</code></pre>
+<p>Thư viện giọng nói (<code>edge-tts</code>, <code>python-docx</code>, v.v.) đã gộp chung vào <code>requirements.txt</code> — không cần file riêng.</p>
+<blockquote>
+<p><strong>Bắt buộc: thư mục <code>clone-voice-client</code> phải nằm cùng cấp với project này</strong> (<code>../clone-voice-client</code>). <code>requirements.txt</code> có dòng <code>-e ../clone-voice-client[local]</code> — lệnh <code>pip install</code> ở trên tự cài thư viện đó (dạng editable) từ thư mục anh em này, không phải từ PyPI. Thiếu thư mục <code>clone-voice-client</code>, bước cài đặt trên sẽ báo lỗi ngay, và app không chạy được. Xem đầy đủ các câu lệnh terminal + ngrok cho cả 4 project liên quan (<code>clone-voice-station</code>, <code>clone-voice-client</code>, <code>rag-legal-assistant</code>, <code>voice-lab-example</code>) tại <a href="./HUONG_DAN_CHAY_TOAN_HE_THONG.md"><code>HUONG_DAN_CHAY_TOAN_HE_THONG.md</code></a>.</p>
+</blockquote>
+<h3 id="23-cau-hinh-api-key">2.3 Cấu Hình API Key</h3>
+<p>Tạo file <code>groqkey.txt</code> tại thư mục gốc dự án, dán API key vào:</p>
+<pre><code>gsk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+</code></pre>
+<h3 id="24-kiem-tra-nhanh">2.4 Kiểm Tra Nhanh</h3>
+<pre><code class="language-bash"># Xác nhận Python đúng phiên bản
+python --version
+
+# Xác nhận Groq key hợp lệ
+python -c &quot;print(open('groqkey.txt').read().strip()[:8] + '...')&quot;
+</code></pre>
+<hr />
+<h2 id="3-khoi-ong-ung-dung">3. Khởi Động Ứng Dụng</h2>
+<pre><code class="language-bash">python app.py
+</code></pre>
+<p>Nội bộ <code>app.py</code> tự gọi Uvicorn (<code>uvicorn.run("app:app", host="127.0.0.1", port=8000)</code>), nên không cần chạy lệnh <code>uvicorn</code> riêng. Terminal hiển thị:</p>
+<pre><code>INFO:     Uvicorn running on http://127.0.0.1:8000
+</code></pre>
+<p>Mở trình duyệt và truy cập: <strong>http://127.0.0.1:8000</strong></p>
+<blockquote>
+<p><strong>Lần đầu khởi động:</strong> Hệ thống tự động tạo file <code>chat.db</code> và seed 3 tài khoản mặc định (học sinh, giáo viên, admin) cùng các giọng đọc TTS dựng sẵn (<code>voice_profiles</code>, kind=<code>builtin</code>, xem mục 12). ChromaDB cũng sẽ tải embedding model từ HuggingFace (cần kết nối Internet lần đầu). <code>engine/rag_engine.py</code> còn tự chạy 2 tác vụ bảo trì lúc khởi động: làm mới whitelist trích dẫn (<code>refresh_citation_sources</code>) và gắn nhãn nguồn gốc cho các đoạn dữ liệu cũ chưa được đánh dấu (<code>backfill_import_source_tags</code>, xem mục 14.4) — cả hai đều an toàn khi chạy lại nhiều lần.</p>
+</blockquote>
+<hr />
+<h2 id="4-vai-tro-tai-khoan">4. Vai Trò &amp; Tài Khoản</h2>
+<p>Hệ thống có <strong>3 vai trò</strong>, phân biệt bằng cột <code>role</code> trong bảng <code>users</code> (0 = Student, 1 = Teacher, 2 = Admin). Admin kế thừa toàn bộ quyền của Teacher.</p>
+<h3 id="tai-khoan-mac-inh">Tài Khoản Mặc Định</h3>
+<table>
+<thead>
+<tr>
+<th>Vai trò</th>
+<th>Tên đăng nhập</th>
+<th>Mật khẩu</th>
+<th>Quyền</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Học sinh</td>
+<td><code>testStudent1</code></td>
+<td><code>123456P@ss</code></td>
+<td>Hỏi đáp RAG + đọc to câu trả lời + tạo giọng nói cá nhân</td>
+</tr>
+<tr>
+<td>Giáo viên</td>
+<td><code>teacher1</code></td>
+<td><code>Teacher@123</code></td>
+<td>Toàn bộ quyền Học sinh + Import văn bản luật/tình huống/dataset + Đánh giá RAG</td>
+</tr>
+<tr>
+<td>Admin</td>
+<td><code>admin1</code></td>
+<td><code>Admin@123</code></td>
+<td>Toàn bộ quyền Giáo viên + Quản lý tài khoản + Quản lý văn bản (xoá dữ liệu đã import) + Quản lý giọng nói (duyệt/huấn luyện lại/vô hiệu hóa giọng nhân bản)</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>Các tài khoản mặc định chỉ được tạo <strong>một lần</strong>, khi bảng <code>users</code> hoàn toàn trống lúc khởi động. Nếu bảng đã có dữ liệu, cần dùng chức năng <strong>Import tài khoản</strong> hoặc thêm thủ công (mục 10) để có tài khoản admin.</p>
+</blockquote>
+<h3 id="cac-buoc-demo-ang-nhap">Các Bước Demo Đăng Nhập</h3>
+<ol>
+<li>Truy cập <code>http://127.0.0.1:8000</code></li>
+<li>Nhập tên đăng nhập và mật khẩu</li>
+<li>Nhấn <strong>Đăng nhập</strong></li>
+<li>Hệ thống tự động điều hướng theo vai trò:<br />
+   - <strong>Học sinh</strong> → giao diện chat hỏi đáp + nút <strong>"🎙 Giọng nói của tôi"</strong> trên sidebar (mọi vai trò đều thấy)<br />
+   - <strong>Giáo viên</strong> → giao diện chat + nút <strong>"Import Law"</strong> + nút <strong>"🎙 Giọng nói của tôi"</strong> + badge <strong>"Giảng viên"</strong><br />
+   - <strong>Admin</strong> → giao diện chat + nút <strong>"Import Law"</strong> + nút <strong>"Manage Account"</strong> + nút <strong>"Manage Law"</strong> + nút <strong>"🎙 Giọng nói của tôi"</strong> + nút quản lý giọng nói admin + badge <strong>"Quản trị viên"</strong></li>
+<li>Trên trang đăng nhập có link <strong>"Đổi mật khẩu"</strong> để tự đổi mật khẩu (yêu cầu tối thiểu 8 ký tự, có chữ hoa, chữ thường, số và ký tự đặc biệt)</li>
+</ol>
+<p><img alt="Trang đăng nhập" src="login.png" /></p>
+<hr />
+<h2 id="5-demo-hoi-ap-phap-ly-vai-tro-hoc-sinh">5. Demo Hỏi Đáp Pháp Lý — Vai Trò Học Sinh</h2>
+<h3 id="buoc-1-tao-cuoc-tro-chuyen-moi">Bước 1: Tạo Cuộc Trò Chuyện Mới</h3>
+<ol>
+<li>Đăng nhập bằng tài khoản học sinh (<code>testStudent1</code>)</li>
+<li>Nhấn nút <strong>"+ New Chat"</strong> ở thanh bên trái</li>
+<li>Một cuộc trò chuyện mới được tạo, sẵn sàng nhận câu hỏi</li>
+</ol>
+<h3 id="buoc-2-at-cau-hoi">Bước 2: Đặt Câu Hỏi</h3>
+<ul>
+<li>Gõ câu hỏi vào ô nhập liệu ở cuối trang</li>
+<li>Nhấn <strong>Enter</strong> hoặc nút gửi</li>
+<li>Hệ thống xử lý theo pipeline ở mục 1, sau đó hiển thị:</li>
+<li>Câu trả lời phù hợp với loại câu hỏi (định nghĩa / điều kiện / thủ tục)</li>
+<li><strong>📖 Nguồn chính:</strong> trích dẫn điều luật cụ thể</li>
+<li><strong>📎 Nguồn tham khảo:</strong> tối đa 3 điều luật liên quan khác (nếu có)</li>
+<li><strong>🔗 Link:</strong> đường dẫn vbpl.vn (nếu có)</li>
+<li>Nút <strong>🔊</strong> cạnh mỗi câu trả lời để đọc to bằng giọng đã chọn (mục 12)</li>
+</ul>
+<p><img alt="Giao diện chat học sinh" src="chat_index_student.png" /></p>
+<h3 id="buoc-3-quan-ly-cuoc-tro-chuyen">Bước 3: Quản Lý Cuộc Trò Chuyện</h3>
+<table>
+<thead>
+<tr>
+<th>Thao tác</th>
+<th>Cách thực hiện</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Đổi tên chat</td>
+<td>Nhấp đúp vào tiêu đề chat ở sidebar</td>
+</tr>
+<tr>
+<td>Xóa chat</td>
+<td>Nhấn icon thùng rác bên cạnh tên chat</td>
+</tr>
+<tr>
+<td>Chuyển chat</td>
+<td>Nhấn vào tên chat khác trong sidebar</td>
+</tr>
+<tr>
+<td>Xem lại lịch sử</td>
+<td>Nhấn vào chat có sẵn — tin nhắn được load từ SQLite</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>Chat của học sinh và giáo viên tách biệt hoàn toàn (cột <code>role</code> trong bảng <code>chats</code>), kể cả khi cùng một <code>user_id</code>.</p>
+</blockquote>
+<hr />
+<h2 id="6-demo-nhap-van-ban-luat-pdf-docx-vai-tro-giao-vien">6. Demo Nhập Văn Bản Luật (PDF / DOCX) — Vai Trò Giáo Viên</h2>
+<p>Tính năng này cho phép giáo viên (hoặc admin) tải lên file <strong>PDF hoặc DOCX</strong>. Hệ thống tự động trích xuất văn bản (hoặc OCR nếu là bản scan), phân đoạn theo điều khoản và lập chỉ mục vào ChromaDB.</p>
+<h3 id="buoc-1-truy-cap-trang-import">Bước 1: Truy Cập Trang Import</h3>
+<ol>
+<li>Đăng nhập bằng tài khoản giáo viên (<code>teacher1</code>) hoặc admin</li>
+<li>Sidebar hiển thị nút <strong>"Import Law"</strong> và badge vai trò ở header</li>
+<li>Nhấn nút <strong>"Import Law"</strong> — trang <code>/import</code> mở ra, tab mặc định <strong>"📄 Upload PDF / DOCX"</strong></li>
+</ol>
+<p><img alt="Giao diện giáo viên — sidebar có nút Import Law và chat &quot;Import new law&quot;" src="chat_index_teacher.png" /></p>
+<h3 id="buoc-2-ien-thong-tin-va-upload">Bước 2: Điền Thông Tin và Upload</h3>
+<table>
+<thead>
+<tr>
+<th>Trường</th>
+<th>Ví dụ</th>
+<th>Mô tả</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Số ký hiệu</td>
+<td><code>59/2020/QH14</code></td>
+<td>Số hiệu chính thức của văn bản — dùng để chống import trùng</td>
+</tr>
+<tr>
+<td>Loại văn bản</td>
+<td><code>Luật Doanh nghiệp</code></td>
+<td>Tên/loại văn bản pháp luật</td>
+</tr>
+<tr>
+<td>Nguồn thu thập</td>
+<td><code>vbpl.vn</code></td>
+<td>Nguồn gốc tài liệu</td>
+</tr>
+<tr>
+<td>File</td>
+<td><em>(chọn file .pdf hoặc .docx)</em></td>
+<td>Hỗ trợ PDF (scan hoặc số) và DOCX</td>
+</tr>
+</tbody>
+</table>
+<p>Nhấn <strong>"🚀 Tải lên &amp; Xử lý AI"</strong> để bắt đầu.</p>
+<p><img alt="Trang import PDF" src="import_pdf.png" /></p>
+<h3 id="buoc-3-quy-trinh-xu-ly-nen">Bước 3: Quy Trình Xử Lý Nền</h3>
+<pre><code>1. Nhận file → lưu tạm thời vào uploads_tmp/
+2. Nếu DOCX: trích xuất văn bản trực tiếp (python-docx, gồm cả bảng)
+3. Nếu PDF:
+   a. Thử trích xuất text trực tiếp bằng pypdf (PDF văn bản số)
+   b. Nếu quá ít ký tự (&lt; 150 ký tự/trang trung bình) → coi là bản scan, chuyển sang OCR:
+      - Tải mô hình VietOCR (vgg_transformer), tự phát hiện CPU/GPU
+      - Chuyển PDF → ảnh (DPI 250, từng batch 5 trang)
+      - Tiền xử lý ảnh (tăng độ tương phản, làm nét)
+      - Nhận dạng dòng văn bản bằng OpenCV
+      - OCR từng dòng bằng VietOCR (beam search)
+4. Phân đoạn theo &quot;Điều X.&quot; trong văn bản
+5. Tạo vector embedding và thêm vào ChromaDB (bỏ qua nếu Số ký hiệu đã tồn tại)
+   — mỗi đoạn được gắn nhãn import_source=&quot;law&quot; để trang Manage Law (mục 11)
+     nhận diện đúng nguồn gốc
+6. Tạo/cập nhật chat &quot;Import new law&quot; với thông báo kết quả
+</code></pre>
+<h3 id="buoc-4-theo-doi-tien-trinh">Bước 4: Theo Dõi Tiến Trình</h3>
+<ul>
+<li>Giao diện hiển thị <strong>thanh tiến trình realtime</strong> và trạng thái từng bước</li>
+<li>Trạng thái: <code>running</code> → <code>done</code> / <code>failed</code></li>
+<li>Khi hoàn tất, kết quả xuất hiện trong chat <strong>"Import new law"</strong> ở sidebar</li>
+<li>Thành công: <code>✅ Hoàn tất! Đã thêm X đoạn vào ChromaDB (bỏ qua Y đoạn trùng lặp).</code></li>
+<li>Thất bại: <code>❌ Lỗi: &lt;chi tiết&gt;</code></li>
+</ul>
+<p><img alt="Kết quả import trong chat &quot;Import new law&quot;" src="import_result.png" /></p>
+<h3 id="luu-y-quan-trong">Lưu Ý Quan Trọng</h3>
+<ul>
+<li>Chỉ chấp nhận định dạng <strong>PDF</strong> hoặc <strong>DOCX</strong></li>
+<li>Văn bản có <strong>số ký hiệu trùng</strong> sẽ bị bỏ qua tự động (không import lại)</li>
+<li>PDF văn bản số (có thể chọn/copy chữ) được trích xuất trực tiếp — <strong>nhanh, không cần OCR</strong></li>
+<li>OCR chỉ chạy khi phát hiện PDF là bản scan, mặc định trên <strong>CPU</strong> — file 50 trang có thể mất 10–30 phút</li>
+<li>Nếu hệ thống <strong>không nhận diện được ranh giới "Điều X."</strong> trong văn bản (văn bản không có tiêu đề điều rõ ràng), quy trình sẽ dùng cắt đoạn dự phòng (3000 ký tự/đoạn) và <strong>báo cảnh báo rõ ràng</strong> trong tiến trình + trong chat "Import new law" — các đoạn này sẽ không có trích dẫn số Điều (thay vì âm thầm gán số Điều sai như trước)</li>
+<li>Để dùng <strong>GPU</strong> (nhanh hơn đáng kể), tạo file <code>.device_config</code> tại thư mục gốc:<br />
+<code>DEVICE=cuda</code></li>
+<li>Muốn xoá một văn bản đã import (VD nhập nhầm số ký hiệu)? Dùng trang <strong>Manage Law</strong> (mục 11, chỉ Admin) thay vì import chồng lên.</li>
+</ul>
+<hr />
+<h2 id="7-demo-nhap-van-ban-tinh-huong-docx-vai-tro-giao-vien">7. Demo Nhập Văn Bản Tình Huống (DOCX) — Vai Trò Giáo Viên</h2>
+<p>Ngoài văn bản luật gốc, giáo viên có thể nạp một <strong>bộ tình huống pháp lý mẫu</strong> (dạng phân tích IRAC — Issue/Rule/Application/Conclusion) để làm phong phú câu trả lời cho các câu hỏi tình huống thực tế.</p>
+<h3 id="buoc-1-chuyen-sang-tab-tinh-huong">Bước 1: Chuyển Sang Tab Tình Huống</h3>
+<p>Tại trang <code>/import</code>, nhấn tab <strong>"📚 Tình huống"</strong>.</p>
+<h3 id="buoc-2-chuan-bi-file-upload">Bước 2: Chuẩn Bị File &amp; Upload</h3>
+<ul>
+<li>File <code>.docx</code> phải theo đúng cấu trúc cố định — mỗi tình huống là một mục <strong>Heading 1</strong> dạng <code>Tình huống NN. &lt;Chủ đề&gt;</code>, gồm các mục con:</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>Mục</th>
+<th>Nội dung</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Dòng đầu (sau Heading 1)</td>
+<td><code>Mã: &lt;mã tình huống&gt;   Độ khó: &lt;Dễ/Trung bình/Khó&gt;</code></td>
+</tr>
+<tr>
+<td><code>1. Đề bài</code></td>
+<td><code>Tình huống: …</code> và <code>Câu hỏi: …</code></td>
+</tr>
+<tr>
+<td><code>2. Câu hỏi dẫn dắt xác định vấn đề pháp lý</code></td>
+<td>Mỗi câu hỏi dẫn dắt một dòng riêng</td>
+</tr>
+<tr>
+<td><code>3. Đáp án theo phương pháp IRAC</code></td>
+<td><code>I – Issue:</code>, <code>R – Rule:</code>, <code>A – Application:</code>, <code>C – Conclusion:</code></td>
+</tr>
+<tr>
+<td><code>4. Căn cứ pháp lý</code></td>
+<td>Mỗi căn cứ pháp lý một dòng riêng (có thể trích nhiều điều/nhiều văn bản khác nhau)</td>
+</tr>
+<tr>
+<td><code>5. Dữ liệu hỗ trợ truy xuất chatbot</code></td>
+<td><code>Từ khóa: k1; k2; k3</code> và <code>Câu hỏi tương đương: q1 \| q2</code></td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>Tải file mẫu qua link <strong>"⬇️ Tải example_scenario.docx"</strong> ở panel bên phải để xem đúng cấu trúc (có sẵn 2 tình huống ví dụ minh hoạ).</li>
+<li>Chọn/kéo thả file <code>.docx</code> đã điền, nhấn <strong>"📥 Tải lên &amp; Xử lý"</strong>.</li>
+</ul>
+<h3 id="buoc-3-quy-trinh-xu-ly-nen_1">Bước 3: Quy Trình Xử Lý Nền</h3>
+<pre><code>1. Đọc toàn bộ paragraph trong file .docx, tách theo từng khối &quot;Tình huống NN.&quot;
+2. Với mỗi tình huống: parse Mã/Độ khó, Đề bài, câu hỏi dẫn dắt, 4 thành phần IRAC,
+   căn cứ pháp lý, từ khóa, câu hỏi tương đương
+3. Gộp thành một đoạn văn bản có cấu trúc cho mỗi tình huống, gắn nhãn
+   doc_type=&quot;scenario_qa&quot;, import_source=&quot;scenario&quot;, nguon_thu_thap=&lt;tên file gốc&gt;
+4. Tạo vector embedding, thêm vào ChromaDB — bỏ qua nếu &quot;Mã&quot; tình huống đã tồn tại
+   (import lại cùng file sẽ không tạo trùng)
+5. Tạo/cập nhật chat &quot;Nhập văn bản tình huống&quot; với thông báo kết quả
+</code></pre>
+<h3 id="luu-y-quan-trong_1">Lưu Ý Quan Trọng</h3>
+<ul>
+<li><strong>Không</strong> gán số ký hiệu (<code>so_ky_hieu</code>) cho các đoạn tình huống — một tình huống có thể trích nhiều điều luật từ nhiều văn bản khác nhau cùng lúc (VD vừa Luật Doanh nghiệp vừa Nghị định 168/2025/NĐ-CP), nên hệ thống không tự gán một mã văn bản duy nhất để tránh trích dẫn sai nguồn. Khi trả lời, các đoạn này vẫn được dùng để truy xuất ngữ nghĩa bình thường, chỉ không tự sinh dòng "📖 Nguồn chính" theo số ký hiệu cho riêng chúng.</li>
+<li>Xoá một bộ tình huống đã import: dùng trang <strong>Manage Law</strong> (mục 11) → tab <strong>Tình huống</strong>, xoá theo tên file gốc.</li>
+</ul>
+<hr />
+<h2 id="8-demo-import-dataset-excel-vai-tro-giao-vien">8. Demo Import Dataset Excel — Vai Trò Giáo Viên</h2>
+<p>Ngoài việc import từng văn bản PDF/DOCX/tình huống, giáo viên có thể nạp nhanh một <strong>bộ dataset Excel</strong> (câu hỏi mẫu + điều luật + metadata) thẳng vào ChromaDB.</p>
+<h3 id="buoc-1-chuyen-sang-tab-dataset">Bước 1: Chuyển Sang Tab Dataset</h3>
+<p>Tại trang <code>/import</code>, nhấn tab <strong>"📊 Import Dataset"</strong>.</p>
+<h3 id="buoc-2-upload-file">Bước 2: Upload File</h3>
+<ul>
+<li>Chọn/kéo thả file <code>.xlsx</code></li>
+<li>Hệ thống <strong>tự nhận diện định dạng</strong> theo tên sheet có trong file:</li>
+<li>Sheet <code>KB_Articles_Updated</code> + <code>Dataset_200</code> → định dạng "200-updated" (mới nhất, có thêm <code>Legal_Update_2025</code>, <code>KB_Articles_Updated</code>)</li>
+<li>Sheet <code>KB_Articles</code> + <code>Dataset_150</code> → định dạng "150" (cũ hơn)</li>
+<li>Nhấn <strong>"📥 Import vào ChromaDB"</strong></li>
+</ul>
+<h3 id="buoc-3-quy-trinh-xu-ly-nen_2">Bước 3: Quy Trình Xử Lý Nền</h3>
+<pre><code>1. Đọc toàn bộ sheet trong file .xlsx
+2. Ưu tiên xử lý KB_Articles_Updated (nếu có), fallback KB_Articles
+3. Xử lý Legal_Update_2025 (nếu có) — các thay đổi pháp lý 2025
+4. Xử lý sheet Dataset_* (ưu tiên Dataset_200 &gt; Dataset_150) — cặp câu hỏi/trả lời mẫu
+5. Loại trùng lặp (theo doc_id hoặc Số ký hiệu + nguồn KB_Articles đã có)
+6. Mỗi đoạn được gắn nhãn import_source=&quot;dataset&quot; + source_file=&lt;tên file .xlsx
+   vừa upload&gt; — đây là điều kiện để trang Manage Law (mục 11) nhóm và xoá đúng
+   theo từng file, thay vì gộp chung mọi lần import dataset thành một khối
+7. Tạo vector embedding, thêm vào ChromaDB theo từng batch 32 tài liệu
+8. Lưu lại file .xlsx gốc vừa upload vào thư mục Dataset/ (không xoá) — nhờ vậy file
+   này tự động xuất hiện trong dropdown chọn dataset ở mục 9 (Đánh giá hệ thống RAG)
+   mà không cần copy tay. Nếu trùng tên với file đã có sẵn, hệ thống tự thêm hậu tố
+   thời gian vào tên file để không ghi đè.
+</code></pre>
+<ul>
+<li>Kết quả trả về: số tài liệu thêm mới theo từng sheet, số bỏ qua do trùng, tổng số tài liệu hiện có trong ChromaDB</li>
+<li>ChromaDB <strong>tích lũy dữ liệu</strong> — import dataset mới không xóa dữ liệu cũ đã có</li>
+<li>Tất cả file dataset (upload qua đây hoặc đặt thủ công) đều nằm trong thư mục<br />
+<strong><code>Dataset/</code></strong> ở gốc dự án — đây là nơi duy nhất hệ thống quét để tìm file cho<br />
+  tính năng Đánh giá RAG (mục 9)</li>
+<li>File <code>Dataset/example_sheet.xlsx</code> là <strong>file mẫu/template</strong> (phục vụ nút tải mẫu ở mục 9), luôn bị loại khỏi dropdown đánh giá — không phải dữ liệu thật</li>
+</ul>
+<hr />
+<h2 id="9-demo-anh-gia-he-thong-rag-vai-tro-giao-vien">9. Demo Đánh Giá Hệ Thống RAG — Vai Trò Giáo Viên</h2>
+<p>Ngay bên dưới phần Import Dataset (cùng trang <code>/import</code>, tab <strong>"📊 Import Dataset"</strong>) là khu vực <strong>Đánh giá hệ thống RAG</strong>, dùng để đo chất lượng câu trả lời so với đáp án mẫu.</p>
+<h3 id="buoc-0-ket-qua-lan-gan-nhat-tu-hien-khi-mo-tab">Bước 0: Kết Quả Lần Gần Nhất Tự Hiện Khi Mở Tab</h3>
+<p>Ngay khi mở tab, hệ thống tự gọi <code>GET /latest_eval_result</code> và hiển thị luôn score card của <strong>lần đánh giá gần nhất</strong> (đánh dấu 📌 "Kết quả lần đánh giá gần nhất") — không cần chạy lại mới thấy điểm. Nếu chưa từng chạy đánh giá nào, khu vực này để trống cho tới khi bấm Quick/Full Evaluation lần đầu.</p>
+<h3 id="buoc-1-chon-file-dataset">Bước 1: Chọn File Dataset</h3>
+<ul>
+<li>Dropdown <strong>"File dataset dùng để đánh giá"</strong> liệt kê <strong>mọi file <code>.xlsx</code></strong> trong thư mục <strong><code>Dataset/</code></strong> (ở gốc dự án) có chứa ít nhất một sheet <code>Dataset_*</code> hoặc <code>Demo_*</code> — tự động lấy qua <code>GET /list_datasets</code>, không cần khai báo tên file cứng trong code (trừ <code>example_sheet.xlsx</code>, luôn bị loại vì là file mẫu). Đặt (hoặc để hệ thống tự lưu, xem mục 8) một file mới vào <code>Dataset/</code> (VD dataset 300 câu tương lai) là dropdown tự nhận diện ngay, miễn sheet đặt tên đúng quy ước <code>Dataset_*</code> / <code>Demo_*</code>.</li>
+<li>Mặc định chọn sẵn <code>enterprise_law_full_rag_chatbot_dataset_200_updated.xlsx</code> nếu có trong danh sách.</li>
+<li>Ngay dưới dropdown hiển thị gợi ý các sheet Demo/Dataset tìm thấy trong file đang chọn; nếu file không có sheet Demo, nút <strong>Quick Evaluation</strong> tự động bị mờ/disable kèm cảnh báo.</li>
+</ul>
+<h3 id="buoc-2-chon-che-o-anh-gia">Bước 2: Chọn Chế Độ Đánh Giá</h3>
+<table>
+<thead>
+<tr>
+<th>Chế độ</th>
+<th>Dữ liệu dùng</th>
+<th>Cách chấm</th>
+<th>Tốc độ</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>⚡ Quick Evaluation</strong></td>
+<td><strong>Toàn bộ</strong> sheet <code>Demo_*</code> có trong file đã chọn, gộp lại và loại trùng theo cột <code>id</code> (VD file có cả <code>Demo_30</code> và <code>Demo_50</code> → gộp thành 50 câu duy nhất)</td>
+<td><code>auto</code> — so khớp từ khóa/trích dẫn (offline, không cần Groq)</td>
+<td>Nhanh</td>
+</tr>
+<tr>
+<td><strong>🔬 Full Evaluation</strong></td>
+<td><strong>Toàn bộ</strong> sheet <code>Dataset_*</code> có trong file đã chọn, gộp lại và loại trùng theo cột <code>id</code> — đây là <strong>bộ dữ liệu đầy đủ</strong> của file (VD file có cả <code>Dataset_150</code> và <code>Dataset_200</code> → gộp thành 200 câu duy nhất), không phải bản rút gọn</td>
+<td><code>llm</code> — chấm bằng Groq LLM theo rubric</td>
+<td>Chậm hơn (~3s/câu do throttle Groq)</td>
+</tr>
+</tbody>
+</table>
+<p>File <code>Dataset/example_sheet.xlsx</code> minh hoạ đúng quy ước đặt tên: sheet <strong><code>Demo_Quick_example</code></strong> (tiền tố <code>Demo_</code>) cho Quick Evaluation, sheet <strong><code>Dataset_example</code></strong> (tiền tố <code>Dataset_</code>) cho Full Evaluation. Đổi tên sheet sang tiền tố khác sẽ khiến sheet đó biến mất khỏi cả dropdown lẫn 2 nút đánh giá — <code>list_available_datasets()</code>/<code>run_evaluation()</code> trong <code>engine/evaluate_engine.py</code> chỉ quét đúng theo 2 tiền tố này.</p>
+<blockquote>
+<p>Nếu file được chọn <strong>không có sheet Demo</strong> mà vẫn bấm Quick Evaluation (hoặc gọi thẳng API), hệ thống báo lỗi: <code>❌ File '&lt;tên file&gt;' không có sheet Demo — không thể chạy Quick Evaluation cho file này.</code> Tương tự với Full Evaluation và sheet Dataset. Đây là bộ đánh giá đọc trực tiếp từ file <code>.xlsx</code> đã chọn trên đĩa, <strong>không</strong> liên quan tới <code>chat.db</code>/ChromaDB.</p>
+</blockquote>
+<h3 id="buoc-3-theo-doi-tien-trinh-ket-qua">Bước 3: Theo Dõi Tiến Trình &amp; Kết Quả</h3>
+<ul>
+<li>Thanh tiến trình hiển thị số câu đã xử lý / tổng số câu</li>
+<li>Sau khi hoàn tất, hiển thị:</li>
+<li><strong>Điểm tổng</strong> (thang 100), theo rubric 5 tiêu chí có trọng số:</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>Tiêu chí</th>
+<th>Trọng số</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Độ chính xác pháp lý</td>
+<td>40%</td>
+</tr>
+<tr>
+<td>Trích dẫn điều luật</td>
+<td>20%</td>
+</tr>
+<tr>
+<td>Mức độ liên quan ngữ cảnh</td>
+<td>20%</td>
+</tr>
+<tr>
+<td>Kiểm soát bịa đặt (hallucination)</td>
+<td>15%</td>
+</tr>
+<tr>
+<td>Rõ ràng, dễ hiểu</td>
+<td>5%</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>Điểm chi tiết theo <strong>loại câu hỏi</strong> (definition/condition/procedure/general) và theo <strong>độ khó</strong></li>
+<li>Tên file dataset và danh sách sheet đã dùng để đánh giá (VD: <code>Demo_30, Demo_50</code>)</li>
+<li>Kết quả chi tiết từng câu được xuất ra file <code>eval_results_&lt;tên_dataset&gt;_&lt;split&gt;_&lt;mode&gt;_&lt;timestamp&gt;.xlsx</code> tại thư mục gốc dự án (không phải trong <code>Dataset/</code> — đây là file kết quả, không phải file input)</li>
+<li>Nút <strong>"⬇️ Tải sheet kết quả"</strong> xuất hiện ngay trong score card sau khi đánh giá xong — tải trực tiếp file <code>eval_results_*.xlsx</code> nói trên qua <code>GET /download_eval_result/&lt;tên_file&gt;</code> mà không cần vào thư mục dự án tìm thủ công</li>
+<li>Sau mỗi lần chạy, hệ thống <strong>chỉ giữ lại 2 file <code>eval_results_*.xlsx</code> mới nhất</strong> trên đĩa (tự xoá các file cũ hơn) và lưu tóm tắt lần chạy gần nhất vào <code>eval_results_latest.json</code> — đây là dữ liệu Bước 0 dùng để hiển thị lại khi mở tab, không cần giữ toàn bộ lịch sử vì giao diện chưa có màn hình duyệt kết quả cũ.</li>
+</ul>
+<h3 id="luu-y-ve-o-chinh-xac-cua-cham-iem-auto-mode">Lưu Ý Về Độ Chính Xác Của Chấm Điểm <code>auto</code> Mode</h3>
+<p>Chế độ <code>auto</code> so khớp trích dẫn bằng cách trích số Điều từ <code>article_reference</code> của bộ câu hỏi rồi tìm chuỗi <code>"điều N"</code> trong câu trả lời. Với các trích dẫn phức tạp hơn (VD <code>"Khoản 35 Điều 4"</code>, <code>"Điều 17 Nghị định 168/2025/NĐ-CP"</code>, hoặc nhiều điều gộp <code>"Điều 27; Điều 38"</code>), hệ thống chỉ lấy đúng số theo sau từ "Điều" trong chuỗi tham chiếu — <strong>không</strong> gộp lẫn số Khoản/số Nghị định/số năm vào cùng một số Điều như trước (lỗi đã sửa ngày 2026-07-21, xem mục 15). Điểm <code>auto</code> vẫn là ước lượng nhanh dựa trên từ khóa, không thay thế được chấm <code>llm</code> (Full Evaluation) khi cần độ chính xác cao.</p>
+<hr />
+<h2 id="10-demo-quan-ly-tai-khoan-vai-tro-admin">10. Demo Quản Lý Tài Khoản — Vai Trò Admin</h2>
+<p>Chỉ tài khoản có vai trò <strong>Admin</strong> mới truy cập được các tính năng này.</p>
+<h3 id="buoc-1-truy-cap-trang-quan-ly">Bước 1: Truy Cập Trang Quản Lý</h3>
+<ol>
+<li>Đăng nhập bằng tài khoản admin (<code>admin1</code>)</li>
+<li>Nhấn nút <strong>"👤 Manage Account"</strong> trên sidebar — trang <code>/manage_accounts</code> mở ra</li>
+<li>Bảng hiển thị toàn bộ tài khoản: tên đăng nhập, vai trò (pill màu), trạng thái (Đang hoạt động / Đã vô hiệu hóa)</li>
+</ol>
+<h3 id="buoc-2-thao-tac-tren-tung-tai-khoan">Bước 2: Thao Tác Trên Từng Tài Khoản</h3>
+<table>
+<thead>
+<tr>
+<th>Thao tác</th>
+<th>Cách thực hiện</th>
+<th>Ghi chú</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Vô hiệu hóa</td>
+<td>Nhấn <strong>"Vô hiệu hóa"</strong></td>
+<td>Tài khoản bị khóa đăng nhập, không xóa dữ liệu</td>
+</tr>
+<tr>
+<td>Kích hoạt lại</td>
+<td>Nhấn <strong>"Kích hoạt"</strong></td>
+<td>Cho phép đăng nhập trở lại</td>
+</tr>
+<tr>
+<td>Xoá tài khoản</td>
+<td>Nhấn <strong>"Xoá"</strong> → xác nhận</td>
+<td>Xoá vĩnh viễn tài khoản + toàn bộ chat/lịch sử liên quan</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>Admin <strong>không thể tự vô hiệu hóa hoặc tự xoá</strong> chính tài khoản đang đăng nhập — nút tương ứng sẽ bị disable.</p>
+</blockquote>
+<h3 id="buoc-3-import-hang-loat-tai-khoan">Bước 3: Import Hàng Loạt Tài Khoản</h3>
+<ol>
+<li>Nhấn <strong>"📥 Import tài khoản"</strong> ở góc trên bảng — trang <code>/import_account</code> mở ra</li>
+<li>Tải file mẫu qua link <strong>"⬇️ Tải file Excel mẫu"</strong> (2 cột: <code>Account Name</code>, <code>Role</code>)</li>
+<li>Chọn/kéo thả file <code>.xlsx</code> đã điền, nhấn <strong>"📥 Import tài khoản"</strong></li>
+<li>Mỗi dòng hợp lệ được tạo với mật khẩu mặc định theo vai trò:</li>
+</ol>
+<table>
+<thead>
+<tr>
+<th>Role trong file</th>
+<th>Mật khẩu mặc định</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Student</td>
+<td><code>123456P@ss</code></td>
+</tr>
+<tr>
+<td>Teacher</td>
+<td><code>Teacher@123</code></td>
+</tr>
+</tbody>
+</table>
+<ol start="5">
+<li>Sau khi import xong, hệ thống báo cáo: <strong>Tạo mới</strong>, <strong>Bỏ qua (trùng tên)</strong>, <strong>Bỏ qua (không hợp lệ)</strong></li>
+<li>Nếu có dòng lỗi (trùng tên / thiếu thông tin / role không hợp lệ), nút <strong>"⚠️ Tải tài khoản lỗi"</strong> xuất hiện — tải về file <code>.xlsx</code> liệt kê từng dòng lỗi kèm cột thứ 3 <strong>"Nguyên nhân lỗi"</strong></li>
+</ol>
+<hr />
+<h2 id="11-demo-quan-ly-van-ban-manage-law-vai-tro-admin">11. Demo Quản Lý Văn Bản (Manage Law) — Vai Trò Admin</h2>
+<p>Trang quản lý tập trung cho cả <strong>3 luồng import</strong> vào ChromaDB (Văn bản pháp luật — mục 6, Dataset — mục 8, Tình huống — mục 7). Chỉ tài khoản <strong>Admin</strong> mới truy cập được — khác với các trang Import (mục 6–8), vốn mở cho cả Giáo viên.</p>
+<h3 id="buoc-1-truy-cap-trang-quan-ly_1">Bước 1: Truy Cập Trang Quản Lý</h3>
+<ol>
+<li>Đăng nhập bằng tài khoản admin (<code>admin1</code>)</li>
+<li>Nhấn nút <strong>"🗂️ Manage Law"</strong> trên sidebar — trang <code>/manage_law</code> mở ra</li>
+<li>Trang có 3 tab, cùng cấu trúc bảng: <strong>Tên</strong> / <strong>Đoạn trong database</strong> / <strong>Xóa</strong></li>
+</ol>
+<h3 id="buoc-2-chuyen-tab-xoa-du-lieu">Bước 2: Chuyển Tab &amp; Xoá Dữ Liệu</h3>
+<table>
+<thead>
+<tr>
+<th>Tab</th>
+<th>Nhóm theo</th>
+<th>Ghi chú</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>📖 Văn bản pháp luật</strong></td>
+<td>Số ký hiệu (<code>so_ky_hieu</code>)</td>
+<td>Xoá toàn bộ đoạn có cùng số ký hiệu — vd xoá <code>59/2020/QH14</code> sẽ gỡ hết các đoạn thuộc văn bản đó</td>
+</tr>
+<tr>
+<td><strong>📊 Dataset</strong></td>
+<td>Tên file <code>.xlsx</code> đã upload (<code>source_file</code>)</td>
+<td>Cần import qua giao diện <strong>sau khi</strong> tính năng theo dõi tệp được thêm (2026-07-21) mới có tên file chính xác — dữ liệu import từ trước ngày đó gộp chung vào mục "(không rõ tệp…)"</td>
+</tr>
+<tr>
+<td><strong>📚 Tình huống</strong></td>
+<td>Tên file <code>.docx</code> đã upload (<code>nguon_thu_thap</code>)</td>
+<td>Xoá theo từng file — không ảnh hưởng các file tình huống khác</td>
+</tr>
+</tbody>
+</table>
+<p>Nhấn <strong>"Xoá"</strong> ở dòng tương ứng → xác nhận → hệ thống xoá toàn bộ đoạn khớp khỏi ChromaDB, đồng thời làm mới whitelist trích dẫn (<code>CITATION_SOURCE</code>) ngay lập tức để không còn trích dẫn tới nguồn đã xoá.</p>
+<blockquote>
+<p><strong>Không thể hoàn tác.</strong> Với văn bản pháp luật/dataset, nếu xoá nhầm thì phải import lại từ file gốc.</p>
+</blockquote>
+<hr />
+<h2 id="12-demo-tinh-nang-giong-noi">12. Demo Tính Năng Giọng Nói</h2>
+<p>Tính năng giọng nói gồm 2 phần độc lập: <strong>đọc to câu trả lời</strong> (TTS, mọi vai trò dùng được ngay) và <strong>nhân bản giọng nói cá nhân</strong> (tùy chọn, huấn luyện qua RVC trên Colab, cần Admin duyệt trước khi dùng).</p>
+<h3 id="121-oc-to-cau-tra-loi-tts">12.1 Đọc To Câu Trả Lời (TTS)</h3>
+<ol>
+<li>Trong khung chat, nhấn nút <strong>🔊</strong> cạnh câu trả lời của bot</li>
+<li>Hệ thống gọi <code>POST /voice/speak</code> với văn bản câu trả lời (đã bỏ phần trích dẫn 📖/📎) và <code>profile_id</code> của giọng đang chọn</li>
+<li>Nếu giọng đang chọn là giọng dựng sẵn (<code>kind="builtin"</code>) → phát trực tiếp qua <strong>edge-TTS</strong></li>
+<li>Nếu là giọng nhân bản của người dùng (<code>kind="cloned"</code>, trạng thái <code>ready</code>) → edge-TTS sinh giọng nền trước, sau đó chuyển qua <strong>RVC</strong> (gọi tới Colab tunnel) để chuyển thành giọng cá nhân</li>
+</ol>
+<p>Giọng dựng sẵn có thể chọn (<code>voice_profiles</code>, kind=<code>builtin</code>, không gắn <code>user_id</code>):</p>
+<table>
+<thead>
+<tr>
+<th>Tên</th>
+<th>Giọng TTS</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>HoaiMy (Nữ)</td>
+<td><code>vi-VN-HoaiMyNeural</code></td>
+</tr>
+<tr>
+<td>NamMinh (Nam)</td>
+<td><code>vi-VN-NamMinhNeural</code> (mặc định)</td>
+</tr>
+<tr>
+<td>Jenny (EN)</td>
+<td><code>en-US-JennyNeural</code></td>
+</tr>
+<tr>
+<td>F5-TTS demo (VN)</td>
+<td><code>f5tts:default</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="122-tao-giong-noi-ca-nhan-rvc">12.2 Tạo Giọng Nói Cá Nhân (RVC)</h3>
+<ol>
+<li>Nhấn nút <strong>"🎙 Giọng nói của tôi"</strong> trên sidebar — trang <code>/voice</code> mở ra (mọi vai trò truy cập được)</li>
+<li>Lần đầu dùng: xác nhận <strong>đồng ý thu âm</strong> (<code>POST /voice/consent</code>) — bắt buộc trước khi tạo giọng nhân bản</li>
+<li>Nhấn <strong>tạo giọng mới</strong> (<code>POST /voice/profiles</code>) — tối đa <strong>2 giọng nhân bản mỗi người dùng</strong> (giới hạn tải cho GPU Colab miễn phí giai đoạn thử nghiệm); phải xoá bớt giọng cũ nếu muốn tạo thêm</li>
+<li>Đọc và ghi âm đủ tối thiểu <strong>5 đoạn mẫu</strong> theo kịch bản đọc sẵn (<code>GET /voice/scripts</code>), upload từng đoạn qua <code>POST /voice/profiles/{id}/samples</code></li>
+<li>Nhấn <strong>"Huấn luyện"</strong> (<code>POST /voice/profiles/{id}/train</code>) — job nền tải mẫu lên Colab RVC server, tự poll trạng thái mỗi 15s (tối đa 2 giờ) qua <code>GET /voice/profiles/{id}/status</code></li>
+<li>Trạng thái giọng chuyển tuần tự: <code>new</code> → <code>collecting</code> → <code>training</code> → <code>ready</code> (hoặc <code>failed</code> nếu lỗi) — chỉ giọng <code>ready</code> mới chọn được để đọc to câu trả lời</li>
+</ol>
+<h3 id="123-quan-ly-giong-noi-vai-tro-admin">12.3 Quản Lý Giọng Nói — Vai Trò Admin</h3>
+<ol>
+<li>Nhấn nút quản lý giọng nói trên sidebar (chỉ Admin thấy) — trang <code>/admin/voice_models</code> mở ra</li>
+<li>Xem danh sách toàn bộ giọng nhân bản của mọi người dùng (<code>GET /list_voice_models</code>)</li>
+<li>Có thể <strong>huấn luyện lại</strong> (<code>POST /admin/voice_models/{id}/retrain</code>), <strong>vô hiệu hóa</strong> (<code>POST /admin/voice_models/{id}/disable</code>) hoặc <strong>xoá hẳn</strong> (<code>DELETE /admin/voice_models/{id}</code>) một giọng bất kỳ</li>
+</ol>
+<h3 id="124-cau-hinh-endpoint-rvc-colab">12.4 Cấu Hình Endpoint RVC (Colab)</h3>
+<p>RVC chạy trên Colab (<code>colab/voice_server.ipynb</code>), lộ ra ngoài qua tunnel (VD ngrok). Endpoint được lưu trong bảng <code>app_settings</code> (key <code>rvc_endpoint</code>) — seed từ biến môi trường <code>RVC_ENDPOINT</code> khi khởi động lần đầu, sau đó admin có thể sửa trực tiếp qua giao diện quản lý giọng nói mà không cần khởi động lại app:</p>
+<pre><code class="language-bash"># Windows — chỉ cần khi seed lần đầu, sau đó sửa qua UI
+set RVC_ENDPOINT=https://xxxx.ngrok.io
+python app.py
+</code></pre>
+<hr />
+<h2 id="13-cau-hoi-demo-goi-y">13. Câu Hỏi Demo Gợi Ý</h2>
+<p>Sử dụng các câu hỏi sau để minh họa từng tính năng trong buổi demo:</p>
+<h3 id="cau-hoi-inh-nghia-definition">Câu Hỏi Định Nghĩa (<code>definition</code>)</h3>
+<pre><code>Quy định về công ty hợp danh là gì?
+Quy định về doanh nghiệp tư nhân là gì?
+Thành viên hợp danh là gì theo Luật Doanh nghiệp?
+Khái niệm công ty TNHH một thành viên là gì?
+</code></pre>
+<h3 id="cau-hoi-ieu-kien-condition">Câu Hỏi Điều Kiện (<code>condition</code>)</h3>
+<pre><code>Điều kiện để thành lập công ty TNHH là gì?
+Yêu cầu về vốn góp trong công ty cổ phần như thế nào?
+Ai được phép là người đại diện theo pháp luật?
+Tên doanh nghiệp bị cấm trong những trường hợp nào?
+</code></pre>
+<h3 id="cau-hoi-thu-tuc-procedure">Câu Hỏi Thủ Tục (<code>procedure</code>)</h3>
+<pre><code>Thủ tục đăng ký thành lập doanh nghiệp tư nhân gồm các bước nào?
+Hồ sơ đăng ký thành lập công ty TNHH cần những gì?
+Quy trình thay đổi đăng ký kinh doanh như thế nào?
+Nộp hồ sơ đăng ký doanh nghiệp ở đâu?
+</code></pre>
+<h3 id="cau-hoi-tong-quat-general">Câu Hỏi Tổng Quát (<code>general</code>)</h3>
+<pre><code>Công ty cổ phần khác công ty TNHH như thế nào?
+Quyền và nghĩa vụ của thành viên góp vốn là gì?
+Trách nhiệm của thành viên hợp danh trong công ty hợp danh?
+</code></pre>
+<h3 id="cau-hoi-tinh-huong-minh-hoa-du-lieu-tu-muc-7">Câu Hỏi Tình Huống (minh hoạ dữ liệu từ mục 7)</h3>
+<pre><code>Nam 17 tuổi có thể tự đứng tên thành lập công ty TNHH một thành viên không?
+Công chức có được đứng tên thành lập và làm Giám đốc công ty không?
+</code></pre>
+<h3 id="cau-hoi-meta-ve-he-thong">Câu Hỏi Meta Về Hệ Thống</h3>
+<pre><code>Database đang lưu bao nhiêu điều luật?
+Luật Doanh nghiệp có bao nhiêu điều?
+</code></pre>
+<h3 id="cau-hoi-ngoai-pham-vi-e-minh-hoa-co-che-tu-choi">Câu Hỏi Ngoài Phạm Vi (để minh họa cơ chế từ chối)</h3>
+<pre><code>Thủ tục ly hôn cần giấy tờ gì?
+</code></pre>
+<blockquote>
+<p><strong>Mẹo demo:</strong> Bắt đầu bằng câu hỏi định nghĩa để thấy hệ thống khớp chính xác điều luật. Sau đó chuyển sang câu hỏi thủ tục để thấy định dạng danh sách bước. Thử một câu hỏi ngoài phạm vi để minh họa cơ chế từ chối. Nhấn nút 🔊 để nghe câu trả lời đọc to (mục 12). Cuối cùng nhập PDF/DOCX/tình huống mới hoặc chạy Đánh giá RAG để minh họa các tính năng cho giáo viên/admin.</p>
+</blockquote>
+<hr />
+<h2 id="14-kien-truc-ky-thuat">14. Kiến Trúc Kỹ Thuật</h2>
+<h3 id="141-cau-truc-thu-muc">14.1 Cấu Trúc Thư Mục</h3>
+<pre><code>rag-legal-assistant/
+├── app.py                          # FastAPI app — tất cả routes (RAG + import + đánh giá + giọng nói)
+├── engine/
+│   ├── rag_engine.py                # Pipeline RAG hỏi đáp + whitelist trích dẫn + quản lý nguồn (Manage Law)
+│   ├── import_law_engine.py         # Pipeline import PDF/DOCX: extract/OCR → phân đoạn → embedding
+│   ├── import_scenario_engine.py    # Pipeline import DOCX tình huống (IRAC) → ChromaDB
+│   ├── import_dataset_engine.py     # Import dataset Excel (150/200-updated) → ChromaDB
+│   ├── import_account_engine.py     # Import tài khoản hàng loạt từ Excel
+│   └── evaluate_engine.py           # Đánh giá chất lượng RAG (auto/llm, demo/all/test)
+├── database/
+│   ├── database.py                  # SQLite: users (3 role), chats, messages, voice_profiles, voice_samples, app_settings, const
+│   └── reference_source.py          # Script rời — thêm thủ công vài điều luật tham khảo (không qua UI)
+├── voice/
+│   ├── voice_engine.py              # Điều phối TTS (edge-TTS) + huấn luyện giọng nhân bản (RVC)
+│   ├── tts.py                       # edge-TTS (giọng dựng sẵn, xem mục 12.1)
+│   ├── rvc_client.py                # Gọi RVC server chạy trên Colab qua tunnel
+│   └── scripts.py                   # Kịch bản đọc mẫu dùng khi thu âm giọng nhân bản
+├── colab/
+│   └── voice_server.ipynb           # Notebook chạy RVC server trên Colab GPU miễn phí
+├── templates/
+│   ├── login.html                   # Đăng nhập + đổi mật khẩu
+│   ├── index.html                   # Giao diện chat chính
+│   ├── import_law.html              # Import PDF/DOCX + Import Tình huống + Import Dataset + Đánh giá RAG
+│   ├── manage_accounts.html         # Quản lý tài khoản (Admin)
+│   ├── manage_law.html              # Quản lý văn bản đã import — 3 tab (Admin)
+│   ├── import_account.html          # Import tài khoản hàng loạt (Admin)
+│   ├── voice_profile.html           # Trang &quot;Giọng nói của tôi&quot; (mọi vai trò)
+│   └── admin_voice_models.html      # Trang quản lý giọng nói nhân bản (Admin)
+├── chroma_db/                       # Vector database (ChromaDB)
+├── Dataset/                          # Mọi file .xlsx dùng để đánh giá RAG (mục 9) — nơi duy nhất /list_datasets quét
+│   ├── enterprise_law_full_rag_chatbot_dataset_200_updated.xlsx   # Dataset mới nhất (200 câu, cập nhật pháp lý 2025)
+│   ├── example_sheet.xlsx            # File mẫu cấu trúc Dataset — không dùng để đánh giá
+│   └── example_scenario.docx         # File mẫu cấu trúc Tình huống (mục 7)
+├── voice_samples/                   # Đoạn ghi âm mẫu người dùng upload khi tạo giọng nhân bản
+├── voice_storage/                   # Model giọng nhân bản đã huấn luyện xong (tải về từ Colab)
+├── uploads_tmp/                     # Lưu file tạm thời khi import (bị xoá/di chuyển ngay sau khi xử lý xong)
+├── eval_results_*.xlsx               # Kết quả đánh giá RAG chi tiết từng câu — chỉ giữ 2 file mới nhất (mục 9)
+├── eval_results_latest.json          # Tóm tắt lần đánh giá gần nhất — hiển thị khi mở tab Đánh giá (mục 9)
+├── chat.db                          # SQLite database
+├── groqkey.txt                      # Groq API key (không commit lên git)
+└── requirements.txt                  # Thư viện (gồm cả thư viện giọng nói)
+</code></pre>
+<h3 id="142-api-endpoints">14.2 API Endpoints</h3>
+<table>
+<thead>
+<tr>
+<th>Endpoint</th>
+<th>Method</th>
+<th>Mô tả</th>
+<th>Quyền</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>/</code></td>
+<td>GET</td>
+<td>Trang chủ / đăng nhập</td>
+<td>Public</td>
+</tr>
+<tr>
+<td><code>/login</code></td>
+<td>POST</td>
+<td>Đăng nhập</td>
+<td>Public</td>
+</tr>
+<tr>
+<td><code>/logout</code></td>
+<td>POST</td>
+<td>Đăng xuất</td>
+<td>Logged in</td>
+</tr>
+<tr>
+<td><code>/session_info</code></td>
+<td>GET</td>
+<td>Thông tin phiên hiện tại</td>
+<td>Public</td>
+</tr>
+<tr>
+<td><code>/change_password</code></td>
+<td>POST</td>
+<td>Tự đổi mật khẩu</td>
+<td>Public (cần đúng mật khẩu cũ)</td>
+</tr>
+<tr>
+<td><code>/get</code></td>
+<td>POST</td>
+<td>Hỏi đáp RAG</td>
+<td>Logged in</td>
+</tr>
+<tr>
+<td><code>/create_chat</code></td>
+<td>POST</td>
+<td>Tạo chat mới</td>
+<td>Logged in</td>
+</tr>
+<tr>
+<td><code>/list_chats</code></td>
+<td>GET</td>
+<td>Danh sách chats</td>
+<td>Logged in</td>
+</tr>
+<tr>
+<td><code>/get_chat_messages</code></td>
+<td>GET</td>
+<td>Lịch sử tin nhắn</td>
+<td>Logged in</td>
+</tr>
+<tr>
+<td><code>/rename_chat</code></td>
+<td>POST</td>
+<td>Đổi tên chat</td>
+<td>Logged in</td>
+</tr>
+<tr>
+<td><code>/delete_chat</code></td>
+<td>POST</td>
+<td>Xóa chat</td>
+<td>Logged in</td>
+</tr>
+<tr>
+<td><code>/import</code></td>
+<td>GET</td>
+<td>Trang import văn bản luật / tình huống / dataset</td>
+<td>Teacher, Admin</td>
+</tr>
+<tr>
+<td><code>/import_law</code></td>
+<td>POST</td>
+<td>Upload PDF/DOCX để import</td>
+<td>Teacher, Admin</td>
+</tr>
+<tr>
+<td><code>/import_status/{job_id}</code></td>
+<td>GET</td>
+<td>Tiến trình import PDF/DOCX</td>
+<td>Teacher, Admin</td>
+</tr>
+<tr>
+<td><code>/import_scenario</code></td>
+<td>POST</td>
+<td>Upload DOCX tình huống để import</td>
+<td>Teacher, Admin</td>
+</tr>
+<tr>
+<td><code>/import_scenario_status/{job_id}</code></td>
+<td>GET</td>
+<td>Tiến trình import tình huống</td>
+<td>Teacher, Admin</td>
+</tr>
+<tr>
+<td><code>/download_scenario_example</code></td>
+<td>GET</td>
+<td>Tải file DOCX mẫu cho tình huống</td>
+<td>Teacher, Admin</td>
+</tr>
+<tr>
+<td><code>/import_dataset</code></td>
+<td>POST</td>
+<td>Upload dataset Excel</td>
+<td>Teacher, Admin</td>
+</tr>
+<tr>
+<td><code>/import_dataset_status/{job_id}</code></td>
+<td>GET</td>
+<td>Tiến trình import dataset</td>
+<td>Teacher, Admin</td>
+</tr>
+<tr>
+<td><code>/list_datasets</code></td>
+<td>GET</td>
+<td>Danh sách file <code>.xlsx</code> có thể dùng để đánh giá</td>
+<td>Teacher, Admin</td>
+</tr>
+<tr>
+<td><code>/download_dataset_example</code></td>
+<td>GET</td>
+<td>Tải file Excel mẫu cho dataset</td>
+<td>Teacher, Admin</td>
+</tr>
+<tr>
+<td><code>/evaluate</code></td>
+<td>POST</td>
+<td>Chạy đánh giá RAG (mode/split/dataset_file)</td>
+<td>Teacher, Admin</td>
+</tr>
+<tr>
+<td><code>/evaluate_status/{job_id}</code></td>
+<td>GET</td>
+<td>Tiến trình đánh giá</td>
+<td>Teacher, Admin</td>
+</tr>
+<tr>
+<td><code>/latest_eval_result</code></td>
+<td>GET</td>
+<td>Kết quả tóm tắt lần đánh giá gần nhất</td>
+<td>Teacher, Admin</td>
+</tr>
+<tr>
+<td><code>/download_eval_result/{filename}</code></td>
+<td>GET</td>
+<td>Tải file kết quả đánh giá (<code>eval_results_*.xlsx</code>)</td>
+<td>Teacher, Admin</td>
+</tr>
+<tr>
+<td><code>/manage_accounts</code></td>
+<td>GET</td>
+<td>Trang quản lý tài khoản</td>
+<td>Admin</td>
+</tr>
+<tr>
+<td><code>/list_users</code></td>
+<td>GET</td>
+<td>Danh sách tài khoản</td>
+<td>Admin</td>
+</tr>
+<tr>
+<td><code>/toggle_user_status</code></td>
+<td>POST</td>
+<td>Vô hiệu hóa / kích hoạt tài khoản</td>
+<td>Admin</td>
+</tr>
+<tr>
+<td><code>/delete_user</code></td>
+<td>POST</td>
+<td>Xoá tài khoản</td>
+<td>Admin</td>
+</tr>
+<tr>
+<td><code>/import_account</code></td>
+<td>GET / POST</td>
+<td>Trang &amp; xử lý import tài khoản hàng loạt</td>
+<td>Admin</td>
+</tr>
+<tr>
+<td><code>/download_account_template</code></td>
+<td>GET</td>
+<td>Tải file Excel mẫu import tài khoản</td>
+<td>Admin</td>
+</tr>
+<tr>
+<td><code>/manage_law</code></td>
+<td>GET</td>
+<td>Trang quản lý văn bản đã import (3 tab)</td>
+<td>Admin</td>
+</tr>
+<tr>
+<td><code>/list_law_sources</code></td>
+<td>GET</td>
+<td>Danh sách văn bản pháp luật (nhóm theo số ký hiệu)</td>
+<td>Admin</td>
+</tr>
+<tr>
+<td><code>/delete_law_source</code></td>
+<td>POST</td>
+<td>Xoá một văn bản pháp luật theo số ký hiệu</td>
+<td>Admin</td>
+</tr>
+<tr>
+<td><code>/list_dataset_sources</code></td>
+<td>GET</td>
+<td>Danh sách dataset đã import (nhóm theo tên file)</td>
+<td>Admin</td>
+</tr>
+<tr>
+<td><code>/delete_dataset_source</code></td>
+<td>POST</td>
+<td>Xoá một dataset theo tên file</td>
+<td>Admin</td>
+</tr>
+<tr>
+<td><code>/list_scenario_sources</code></td>
+<td>GET</td>
+<td>Danh sách bộ tình huống đã import (nhóm theo tên file)</td>
+<td>Admin</td>
+</tr>
+<tr>
+<td><code>/delete_scenario_source</code></td>
+<td>POST</td>
+<td>Xoá một bộ tình huống theo tên file</td>
+<td>Admin</td>
+</tr>
+<tr>
+<td><code>/voice</code></td>
+<td>GET</td>
+<td>Trang "Giọng nói của tôi"</td>
+<td>Logged in</td>
+</tr>
+<tr>
+<td><code>/voice/scripts</code></td>
+<td>GET</td>
+<td>Kịch bản đọc mẫu để thu âm</td>
+<td>Logged in</td>
+</tr>
+<tr>
+<td><code>/voice/profiles</code></td>
+<td>GET / POST</td>
+<td>Danh sách / tạo giọng nói của bản thân</td>
+<td>Logged in</td>
+</tr>
+<tr>
+<td><code>/voice/consent</code></td>
+<td>POST</td>
+<td>Xác nhận đồng ý thu âm (bắt buộc trước khi tạo giọng)</td>
+<td>Logged in</td>
+</tr>
+<tr>
+<td><code>/voice/profiles/{id}</code></td>
+<td>PUT / DELETE</td>
+<td>Đổi tên, đặt mặc định / xoá giọng của bản thân</td>
+<td>Logged in (chủ sở hữu)</td>
+</tr>
+<tr>
+<td><code>/voice/profiles/{id}/samples</code></td>
+<td>GET / POST / DELETE</td>
+<td>Quản lý mẫu ghi âm của một giọng</td>
+<td>Logged in (chủ sở hữu)</td>
+</tr>
+<tr>
+<td><code>/voice/profiles/{id}/train</code></td>
+<td>POST</td>
+<td>Bắt đầu huấn luyện giọng nhân bản qua RVC</td>
+<td>Logged in (chủ sở hữu)</td>
+</tr>
+<tr>
+<td><code>/voice/profiles/{id}/status</code></td>
+<td>GET</td>
+<td>Tiến trình huấn luyện</td>
+<td>Logged in (chủ sở hữu)</td>
+</tr>
+<tr>
+<td><code>/voice/speak</code></td>
+<td>POST</td>
+<td>Đọc to một đoạn văn bản bằng giọng đã chọn (TTS/RVC)</td>
+<td>Logged in</td>
+</tr>
+<tr>
+<td><code>/admin/voice_models</code></td>
+<td>GET</td>
+<td>Trang quản lý mọi giọng nhân bản</td>
+<td>Admin</td>
+</tr>
+<tr>
+<td><code>/list_voice_models</code></td>
+<td>GET</td>
+<td>Danh sách mọi giọng nhân bản của mọi người dùng</td>
+<td>Admin</td>
+</tr>
+<tr>
+<td><code>/admin/voice_models/{id}/retrain</code></td>
+<td>POST</td>
+<td>Huấn luyện lại một giọng</td>
+<td>Admin</td>
+</tr>
+<tr>
+<td><code>/admin/voice_models/{id}/disable</code></td>
+<td>POST</td>
+<td>Vô hiệu hóa một giọng</td>
+<td>Admin</td>
+</tr>
+<tr>
+<td><code>/admin/voice_models/{id}</code></td>
+<td>DELETE</td>
+<td>Xoá hẳn một giọng</td>
+<td>Admin</td>
+</tr>
+</tbody>
+</table>
+<h3 id="143-phan-loai-cau-hoi-rag">14.3 Phân Loại Câu Hỏi RAG</h3>
+<table>
+<thead>
+<tr>
+<th>Loại</th>
+<th>Từ khóa nhận dạng</th>
+<th>Định dạng trả lời</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>procedure</code></td>
+<td>trình tự, thủ tục, quy trình, các bước, hồ sơ, nộp ở đâu</td>
+<td>Danh sách bước 1, 2, 3…</td>
+</tr>
+<tr>
+<td><code>condition</code></td>
+<td>điều kiện, yêu cầu, cần có, phải có</td>
+<td>Liệt kê điều kiện</td>
+</tr>
+<tr>
+<td><code>definition</code></td>
+<td>là gì, khái niệm, định nghĩa, quy định về</td>
+<td>Ngắn gọn + căn cứ điều luật</td>
+</tr>
+<tr>
+<td><code>general</code></td>
+<td><em>(các câu hỏi khác)</em></td>
+<td>Tự do, nêu đủ căn cứ pháp lý</td>
+</tr>
+</tbody>
+</table>
+<h3 id="144-whitelist-trich-dan-citation_source-nhan-nguon-goc-import_source">14.4 Whitelist Trích Dẫn (<code>CITATION_SOURCE</code>) &amp; Nhãn Nguồn Gốc (<code>import_source</code>)</h3>
+<ul>
+<li><strong><code>CITATION_SOURCE</code></strong> (lưu trong <code>chat.db</code>, bảng <code>const</code>) là danh sách mọi <code>so_ky_hieu</code> <strong>đang thực sự có mặt</strong> trong ChromaDB tại thời điểm làm mới gần nhất. <code>build_citation()</code> trong <code>rag_engine.py</code> từ chối in ra bất kỳ số ký hiệu nào không nằm trong danh sách này — chặn trường hợp trích dẫn tới văn bản đã bị xoá hoặc metadata bị hỏng/giả mạo. Danh sách này tự làm mới sau mỗi lần import (mục 6, 8) và sau mỗi lần xoá (mục 11).</li>
+<li>Đoạn dữ liệu từ <strong>Văn bản tình huống</strong> (mục 7) không có <code>so_ky_hieu</code> nên không nằm trong whitelist — đây là chủ đích, không phải thiếu sót (xem giải thích ở mục 7).</li>
+<li><strong><code>import_source</code></strong> là nhãn nội bộ (<code>"law"</code> / <code>"dataset"</code> / <code>"scenario"</code>) gắn vào từng đoạn dữ liệu để trang Manage Law (mục 11) biết đoạn đó thuộc luồng import nào. Dữ liệu import <strong>trước khi</strong> nhãn này tồn tại được tự động gắn nhãn suy luận lúc khởi động ứng dụng (<code>backfill_import_source_tags()</code>, chạy một lần, an toàn khi gọi lại nhiều lần) — dựa trên các dấu hiệu sẵn có trong metadata (VD: có <code>segment_index</code> → <code>"law"</code>; <code>doc_type="scenario_qa"</code> → <code>"scenario"</code>; <code>so_ky_hieu</code> khớp mã dataset mặc định và không có <code>segment_index</code> → <code>"dataset"</code>). Vài đoạn tham khảo thêm bằng tay qua <code>database/reference_source.py</code> (ngoài 3 luồng UI) không được gắn nhãn này, nên sẽ không xuất hiện ở tab Dataset/Tình huống của Manage Law — nhưng vẫn xuất hiện đúng ở tab Văn bản pháp luật (nhóm theo <code>so_ky_hieu</code>).</li>
+</ul>
+<h3 id="145-giong-noi-voice_profiles-voice_samples-app_settings">14.5 Giọng Nói: <code>voice_profiles</code> / <code>voice_samples</code> / <code>app_settings</code></h3>
+<ul>
+<li><strong><code>voice_profiles</code></strong> lưu cả giọng dựng sẵn (<code>kind="builtin"</code>, <code>user_id</code> NULL, xem bảng ở mục 12.1) lẫn giọng nhân bản của người dùng (<code>kind="cloned"</code>), kèm trạng thái huấn luyện (<code>status</code>: <code>new</code>→<code>collecting</code>→<code>training</code>→<code>ready</code>/<code>failed</code>).</li>
+<li><strong><code>voice_samples</code></strong> lưu đường dẫn từng file ghi âm mẫu, gắn với <code>profile_id</code> và kịch bản đọc (<code>script_id</code>, xem <code>voice/scripts.py</code>) — là dữ liệu đầu vào để huấn luyện RVC.</li>
+<li><strong><code>app_settings</code></strong> là key/value store dùng cho cấu hình có thể đổi lúc chạy mà không cần restart app — hiện chỉ có <code>rvc_endpoint</code> (mục 12.4).</li>
+<li>Cả 3 bảng này độc lập với whitelist <code>CITATION_SOURCE</code>/<code>import_source</code> ở mục 14.4 — giọng nói không liên quan tới ChromaDB hay trích dẫn điều luật.</li>
+</ul>
+<h3 id="146-schema-database-sqlite">14.6 Schema Database SQLite</h3>
+<pre><code>users          (user_id, user_name, password, role[0=student,1=teacher,2=admin], status[0=active,1=disabled])
+chats          (id, student_id, title, created_at, role[0=student chat, 1=teacher chat])
+messages       (id, chat_id, role[user|assistant], text, timestamp)
+const          (name, content)   # key/value — VD name=&quot;CITATION_SOURCE&quot; (xem mục 14.4)
+voice_profiles (id, user_id, name, kind[builtin|cloned], base_tts_voice, speaker_id, status, is_default, error_message, model_local_path, created_at)
+voice_samples  (id, profile_id, script_id, file_path, created_at)
+app_settings   (key, value)      # key/value — VD key=&quot;rvc_endpoint&quot; (xem mục 12.4)
+</code></pre>
+<p>Chat giáo viên và học sinh được tách biệt hoàn toàn theo cột <code>role</code>, ngay cả khi <code>user_id</code> trùng nhau. Admin dùng chung không gian chat với vai trò Teacher (<code>role=1</code>).</p>
+<hr />
+<h2 id="15-xu-ly-su-co">15. Xử Lý Sự Cố</h2>
+<h3 id="loi-khong-ket-noi-groq">Lỗi Không Kết Nối Groq</h3>
+<p><strong>Triệu chứng:</strong> Câu trả lời trả về <code>❌ Lỗi hệ thống.</code></p>
+<p><strong>Kiểm tra:</strong><br />
+- File <code>groqkey.txt</code> tồn tại và chứa API key hợp lệ (bắt đầu bằng <code>gsk_</code>)<br />
+- Có kết nối Internet<br />
+- API key chưa hết hạn / hết quota tháng</p>
+<p><strong>Lưu ý:</strong> Groq có tự động retry 3 lần (5s / 10s / 15s) khi gặp lỗi rate limit / timeout.</p>
+<hr />
+<h3 id="chromadb-trong-khong-tim-thay-ket-qua">ChromaDB Trống — Không Tìm Thấy Kết Quả</h3>
+<p><strong>Triệu chứng:</strong> <code>⚠️ Không tìm thấy thông tin đủ liên quan trong cơ sở dữ liệu.</code></p>
+<p><strong>Nguyên nhân:</strong> Chưa có dữ liệu trong ChromaDB.</p>
+<p><strong>Khắc phục:</strong></p>
+<pre><code class="language-bash"># Import trực tiếp từ file PDF/DOCX qua giao diện giáo viên (xem mục 6)
+# Hoặc import bộ tình huống DOCX (xem mục 7)
+# Hoặc import nhanh từ dataset Excel có sẵn qua giao diện (xem mục 8)
+python database/build_db_from_dataset_updated.py
+</code></pre>
+<hr />
+<h3 id="ocr-chay-cham">OCR Chạy Chậm</h3>
+<p><strong>Nguyên nhân:</strong> Mặc định dùng CPU, chỉ kích hoạt khi PDF là bản scan. File 50 trang mất 10–30 phút.</p>
+<p><strong>Tăng tốc với GPU (nếu có NVIDIA CUDA):</strong></p>
+<p>Tạo file <code>.device_config</code> tại thư mục gốc:</p>
+<pre><code>DEVICE=cuda
+</code></pre>
+<hr />
+<h3 id="loi-poppler-khong-tim-thay">Lỗi Poppler Không Tìm Thấy</h3>
+<p><strong>Triệu chứng:</strong> <code>PDFPageCountError</code> hoặc <code>Unable to get page count</code></p>
+<p><strong>Khắc phục:</strong> Kiểm tra thư mục <code>poppler/Library/bin/</code> tồn tại và có các file binary (pdftoppm.exe, pdfinfo.exe…). Nếu thiếu, tải Poppler cho Windows từ https://github.com/oschwartz10612/poppler-windows/releases và giải nén vào đúng đường dẫn.</p>
+<hr />
+<h3 id="loi-ang-nhap-that-bai">Lỗi Đăng Nhập Thất Bại</h3>
+<p><strong>Triệu chứng:</strong> Thông báo "Đăng nhập thất bại" hoặc "Tài khoản đã bị vô hiệu hóa"</p>
+<p><strong>Kiểm tra:</strong><br />
+- Tên đăng nhập và mật khẩu phân biệt chữ hoa/thường<br />
+- Tài khoản mặc định (student/teacher/admin) chỉ được tạo khi bảng <code>users</code> <strong>trống hoàn toàn</strong> (lần khởi động đầu tiên) — nếu thiếu tài khoản admin, dùng Import tài khoản (mục 10) hoặc thêm thủ công vào bảng <code>users</code><br />
+- Tài khoản bị Admin vô hiệu hóa sẽ không đăng nhập được cho tới khi được kích hoạt lại</p>
+<hr />
+<h3 id="anh-gia-rag-dung-sai-dataset">Đánh Giá RAG Dùng Sai Dataset</h3>
+<p><strong>Triệu chứng:</strong> Kết quả đánh giá không phản ánh dataset mong muốn</p>
+<p><strong>Nguyên nhân:</strong> <code>/evaluate</code> đọc từ file <code>.xlsx</code> được chọn ở dropdown "File dataset dùng để đánh giá" (mục 9, bước 1), <strong>không</strong> phải từ dữ liệu vừa import vào ChromaDB qua mục 8 — đây là hai nguồn hoàn toàn khác nhau (file trên đĩa vs vector DB).</p>
+<p><strong>Khắc phục:</strong> Kiểm tra lại dropdown đã chọn đúng file mong muốn trước khi bấm Quick/Full Evaluation. Nếu file mới không xuất hiện trong dropdown, xác nhận file <code>.xlsx</code> đã nằm trong thư mục <strong><code>Dataset/</code></strong> (không phải thư mục gốc dự án) và có ít nhất một sheet đặt tên đúng quy ước <code>Dataset_*</code> hoặc <code>Demo_*</code>.</p>
+<hr />
+<h3 id="quick-evaluation-bi-disable-bao-loi-khong-co-sheet-demo">Quick Evaluation Bị Disable / Báo Lỗi "Không Có Sheet Demo"</h3>
+<p><strong>Triệu chứng:</strong> Nút Quick Evaluation bị mờ, hoặc chạy báo <code>❌ File '...' không có sheet Demo…</code></p>
+<p><strong>Nguyên nhân:</strong> File dataset đang chọn chỉ có sheet <code>Dataset_*</code> (dùng được cho Full Evaluation) nhưng thiếu sheet <code>Demo_*</code>.</p>
+<p><strong>Khắc phục:</strong> Chọn file khác có sẵn sheet <code>Demo_*</code> trong dropdown, hoặc thêm một sheet đặt tên <code>Demo_&lt;số&gt;</code> vào file Excel đó rồi tải lại trang.</p>
+<hr />
+<h3 id="tra-loi-sai-noi-dung-trich-dan-sai-ieu-luat-vd-hoi-ieu-143-ra-noi-dung-ieu-khac">Trả Lời Sai Nội Dung / Trích Dẫn Sai Điều Luật (VD: hỏi "Điều 143" ra nội dung Điều khác)</h3>
+<p><strong>Triệu chứng:</strong> Đặt câu hỏi nêu rõ số Điều (VD: "Điều 143") hoặc một từ khóa ngắn (VD: "Tập đoàn") nhưng câu trả lời/trích dẫn không khớp với Điều luật thực sự nói về nội dung đó.</p>
+<p><strong>Nguyên nhân đã phát hiện (2026-07-06):</strong> Dữ liệu văn bản 67/VBHN-VPQH trong ChromaDB từng bị import bằng <code>database/build_db_doc.py</code> với regex tách "Điều X." gõ nhầm ký tự (<code>Dieu</code> ASCII thay vì <code>Điều</code> tiếng Việt) — regex này không bao giờ khớp, khiến toàn bộ văn bản bị cắt cứng thành từng đoạn 3000 ký tự bất kể ranh giới Điều luật, và metadata <code>article_number</code> chỉ là số thứ tự đoạn (không phải số Điều thật). Hệ quả: một đoạn có thể chứa nội dung của 2 Điều liền kề, và tra cứu theo số Điều/từ khóa ngắn trả về sai.</p>
+<p><strong>Đã khắc phục:</strong><br />
+- Sửa regex trong <code>database/build_db_doc.py</code> và <code>engine/import_law_engine.py</code> để khớp đúng "Điều X." (ký tự Đ tiếng Việt)<br />
+- Cả 2 script giờ <strong>cảnh báo rõ ràng</strong> thay vì âm thầm gán số Điều giả nếu vẫn rơi vào fallback<br />
+- <code>engine/rag_engine.py</code> được thêm 2 cơ chế truy xuất mới: (1) tra thẳng theo metadata khi câu hỏi có dạng "Điều N", (2) quét từ khóa trực tiếp cho câu hỏi ngắn (≤5 từ, VD "Tập đoàn") — thay vì chỉ dựa vào tìm kiếm ngữ nghĩa</p>
+<p><strong>Nếu ChromaDB hiện tại vẫn còn dữ liệu luật bị chunk sai</strong> (dấu hiệu: metadata <code>article_number</code> trùng với <code>segment_index + 1</code>), chạy:</p>
+<pre><code class="language-bash">python database/rebuild_law_from_docx.py
+</code></pre>
+<p>Script này xóa các đoạn văn bản 67/VBHN-VPQH bị chunk sai và build lại đúng theo từng Điều từ file DOCX gốc (<code>67_VBHN-VPQH_671127 (1).docx</code>), <strong>không đụng</strong> tới dữ liệu Q&amp;A/KB_Articles từ Dataset Excel.</p>
+<hr />
+<h3 id="iem-anh-gia-auto-mode-thap-bat-thuong-du-cau-tra-loi-ung">Điểm Đánh Giá <code>auto</code> Mode Thấp Bất Thường Dù Câu Trả Lời Đúng</h3>
+<p><strong>Triệu chứng:</strong> Chạy Quick Evaluation, nhiều câu có <code>citation_correct = 0</code> và <code>hallucination</code> thấp dù xem thủ công thấy câu trả lời <strong>trích dẫn đúng</strong> điều luật yêu cầu.</p>
+<p><strong>Nguyên nhân đã phát hiện (2026-07-21):</strong> <code>_auto_score()</code> trong <code>engine/evaluate_engine.py</code> từng lấy số Điều bằng cách xoá hết ký tự không phải số trong toàn bộ chuỗi <code>article_reference</code> — với tham chiếu chỉ có một số (VD <code>"Điều 17"</code>) thì đúng, nhưng với tham chiếu có nhiều số (VD <code>"Khoản 35 Điều 4"</code> → gộp thành <code>"354"</code>, <code>"Điều 17 Nghị định 168/2025/NĐ-CP"</code> → gộp thành <code>"171682025"</code>) thì số bị gộp sai hoàn toàn và không bao giờ khớp được với văn bản trả lời thật, dù trả lời đúng 100%. Lỗi này ảnh hưởng 23/50 câu (46%) trong bộ dữ liệu <code>enterprise_law_full_rag_chatbot_dataset_200_updated.xlsx</code>, kéo điểm tổng từ mức thực tế ~73/100 xuống còn 66.7/100.</p>
+<p><strong>Đã khắc phục:</strong> Đổi sang trích riêng số theo sau từ khoá "Điều" (<code>_extract_article_numbers</code>), có fallback theo số hiệu văn bản/nghị định khi tham chiếu không chứa "Điều" (VD chỉ có <code>"76/2025/QH15"</code>). Xác minh trên dữ liệu thật: 14/50 câu chuyển từ chấm sai (0 điểm) sang chấm đúng (3 điểm), không có câu nào bị chấm sai theo chiều ngược lại.</p>
+<p><strong>Nếu vẫn thấy điểm bất thường:</strong> Kiểm tra định dạng cột <code>article_reference</code> trong file dataset — chấm điểm chỉ nhận diện được số Điều đứng ngay sau từ "Điều" (không phân biệt hoa/thường), các dạng viết tắt khác (VD chỉ ghi số Điều mà không có chữ "Điều") sẽ không được nhận diện.</p>
+<hr />
+<h3 id="khong-tao-uoc-khong-huan-luyen-uoc-giong-noi-ca-nhan">Không Tạo Được / Không Huấn Luyện Được Giọng Nói Cá Nhân</h3>
+<p><strong>Triệu chứng:</strong> Nhấn "Huấn luyện" ở trang <code>/voice</code> nhưng trạng thái mãi ở <code>training</code> không chuyển sang <code>ready</code>, hoặc báo <code>failed</code>.</p>
+<p><strong>Kiểm tra:</strong><br />
+- <code>app_settings.rvc_endpoint</code> đã được cấu hình đúng và Colab notebook (<code>colab/voice_server.ipynb</code>) đang chạy — RVC không chạy cục bộ, phụ thuộc hoàn toàn vào tunnel này còn sống<br />
+- Đã ghi đủ tối thiểu <strong>5 mẫu</strong> trước khi nhấn Huấn luyện<br />
+- Job huấn luyện tự poll tối đa 2 giờ (<code>MAX_TRAIN_WAIT_SEC</code>) — Colab notebook bị ngắt kết nối (hết phiên miễn phí) giữa chừng sẽ khiến job không bao giờ hoàn tất; cần khởi động lại notebook và nhấn Huấn luyện lại<br />
+- Đã đạt giới hạn <strong>2 giọng nhân bản/người dùng</strong> — phải xoá bớt giọng cũ trước khi tạo giọng mới</p>
+<p><strong>Khắc phục:</strong> Admin có thể chủ động <strong>huấn luyện lại</strong> giọng bị lỗi qua trang <code>/admin/voice_models</code> (mục 12.3) mà không cần người dùng ghi âm lại từ đầu.</p>
+<hr />
+<h2 id="ghi-chu-them">Ghi Chú Thêm</h2>
+<ul>
+<li>Hệ thống hỗ trợ <strong>đa phiên đồng thời</strong> — nhiều người dùng có thể truy cập cùng lúc</li>
+<li>Dữ liệu chat được <strong>lưu vĩnh viễn</strong> trong <code>chat.db</code>; không mất khi restart</li>
+<li>ChromaDB <strong>tích lũy dữ liệu</strong> — import thêm văn bản/tình huống/dataset mới không xóa dữ liệu cũ, trừ khi admin chủ động xoá qua trang Manage Law (mục 11)</li>
+<li>Mọi câu trả lời đều kèm <strong>📖 trích dẫn điều luật chính</strong> và có thể có <strong>📎 nguồn tham khảo phụ</strong> + <strong>🔗 link nguồn</strong>, cùng nút <strong>🔊 đọc to</strong> (mục 12)</li>
+<li>Hệ thống có cơ chế <strong>retry tự động</strong> khi Groq bị rate limit (3 lần, backoff 5s/10s/15s)</li>
+<li>Admin quản lý được vòng đời tài khoản (kích hoạt/vô hiệu hóa/xoá), import tài khoản hàng loạt kèm báo cáo lỗi chi tiết, quản lý/xoá dữ liệu đã import theo cả 3 luồng (văn bản luật, dataset, tình huống), và quản lý giọng nói nhân bản của mọi người dùng</li>
+</ul>
+    <footer>Chuyen doi tu HUONG_DAN_DEMO.md &mdash; xem file goc de biet lich su chinh sua.</footer>
+  </main>
+</div>
+</body>
+</html>
