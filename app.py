@@ -1315,7 +1315,7 @@ async def admin_list_stt_local_packs_route(request: Request):
 
 
 @app.post("/admin/stt_local_packs")
-async def admin_upload_stt_local_pack_route(request: Request, pack: UploadFile = File(...)):
+async def admin_upload_stt_local_pack_route(request: Request, background_tasks: BackgroundTasks, pack: UploadFile = File(...)):
     """Uploads a .stt-pack.zip downloaded from clone-voice-station's STT Lab
     (/stt-lab, "Tải xuống" on a finished adapter) so this app can run it as a
     local Whisper model -- see voice/station_client.py's local-pack section."""
@@ -1326,17 +1326,26 @@ async def admin_upload_stt_local_pack_route(request: Request, pack: UploadFile =
         entry = station_client.upload_stt_local_pack(pack.filename, content)
     except ValueError as e:
         return JSONResponse({"status": "error", "message": str(e)}, status_code=400)
+    # The first pack ever uploaded becomes active automatically (see
+    # upload_stt_local_pack) -- pre-warm it too in that case, same as an
+    # explicit activate below.
+    if station_client.list_stt_local_packs().get("active_id") == entry["id"]:
+        background_tasks.add_task(station_client._get_active_pack_loaded)
     return {"status": "ok", "pack": entry}
 
 
 @app.post("/admin/stt_local_packs/{pack_id}/activate")
-async def admin_activate_stt_local_pack_route(request: Request, pack_id: str):
+async def admin_activate_stt_local_pack_route(request: Request, pack_id: str, background_tasks: BackgroundTasks):
     if not logged_in(request) or not is_admin(request):
         return JSONResponse({"status": "error", "message": "Unauthorized"}, status_code=403)
     try:
         station_client.set_active_stt_local_pack(pack_id)
     except ValueError as e:
         return JSONResponse({"status": "error", "message": str(e)}, status_code=400)
+    # Pre-warm in the background so the FIRST recording after switching packs
+    # isn't the one paying for zip-extraction + (Tier 2) loading the base
+    # Whisper model + LoRA adapter into memory.
+    background_tasks.add_task(station_client._get_active_pack_loaded)
     return {"status": "ok"}
 
 

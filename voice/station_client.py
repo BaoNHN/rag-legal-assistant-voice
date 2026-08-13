@@ -194,7 +194,10 @@ def _write_stt_packs_index(index: dict):
 
 
 def list_stt_local_packs() -> dict:
-    return _read_stt_packs_index()
+    index = _read_stt_packs_index()
+    for p in index["packs"]:
+        p["is_warm"] = p["id"] in _loaded_pack_cache
+    return index
 
 
 def is_stt_local_mode_enabled() -> bool:

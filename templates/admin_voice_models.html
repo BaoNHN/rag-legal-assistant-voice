@@ -296,6 +296,8 @@ async function loadSttPacks() {
   const data = await fetch('/admin/stt_local_packs').then(r => r.json());
   document.getElementById('sttLocalModeToggle').checked = !!data.local_enabled;
   renderSttPacks(data);
+  const active = (data.packs || []).find(p => p.id === data.active_id);
+  if (active && !active.is_warm) pollUntilWarm(15);
 }
 
 function renderSttPacks(data) {
@@ -305,14 +307,40 @@ function renderSttPacks(data) {
     el.innerHTML = '<div class="empty-state">Chưa có pack nào — tải lên một file .stt-pack.zip ở trên.</div>';
     return;
   }
-  el.innerHTML = packs.map(p => `
+  el.innerHTML = packs.map(p => {
+    const isActive = p.id === data.active_id;
+    // Chỉ pack đang active mới cần "warm" (giải nén + load model vào RAM) --
+    // hoạt động ngầm ngay khi activate/upload (xem /admin/stt_local_packs
+    // routes), badge này chỉ phản ánh việc ngầm đó đã xong chưa.
+    const warmBadge = !isActive ? '' : (p.is_warm
+      ? '<span class="health-dot up"></span>Sẵn sàng'
+      : '<span class="health-dot down"></span>Đang tải model ngầm…');
+    return `
     <div class="pack-row">
-      <input type="radio" name="activePack" ${p.id === data.active_id ? 'checked' : ''} data-action="activate-pack" data-id="${p.id}"/>
+      <input type="radio" name="activePack" ${isActive ? 'checked' : ''} data-action="activate-pack" data-id="${p.id}"/>
       <span class="pack-label">${escapeHtml(p.label)}</span>
       <span class="pack-meta">${p.base_model} · Tier ${p.tier}</span>
+      ${isActive ? `<span class="pack-meta" style="min-width:150px;">${warmBadge}</span>` : ''}
       <button class="btn-action danger" data-action="delete-pack" data-id="${p.id}">Xoá</button>
     </div>
-  `).join('');
+  `;
+  }).join('');
+}
+
+// Polls the pack list every 2s (up to 15 tries, ~30s) until the active pack
+// reports is_warm -- lets the "Sẵn sàng"/"Đang tải…" badge above update on
+// its own after activate/upload, instead of the admin having to reload the
+// page to find out whether the background pre-warm finished.
+let _warmPollTimer = null;
+function pollUntilWarm(triesLeft) {
+  clearTimeout(_warmPollTimer);
+  if (triesLeft <= 0) return;
+  _warmPollTimer = setTimeout(async () => {
+    const data = await fetch('/admin/stt_local_packs').then(r => r.json());
+    renderSttPacks(data);
+    const active = (data.packs || []).find(p => p.id === data.active_id);
+    if (active && !active.is_warm) pollUntilWarm(triesLeft - 1);
+  }, 2000);
 }
 
 document.getElementById('sttLocalModeToggle').addEventListener('change', async (e) => {
@@ -339,6 +367,7 @@ document.getElementById('sttPacksList').addEventListener('click', async (e) => {
   const actBtn = e.target.closest('[data-action="activate-pack"]');
   if (actBtn) {
     await fetch(`/admin/stt_local_packs/${actBtn.dataset.id}/activate`, { method: 'POST' });
+    await loadSttPacks();
     return;
   }
   const delBtn = e.target.closest('[data-action="delete-pack"]');
