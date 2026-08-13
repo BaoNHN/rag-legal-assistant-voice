@@ -13,6 +13,7 @@ groqkeyss.txt
 voice_station_key.txt
 session_secret.txt
 .device_config
+voice_station_url_override.txt
 
 # Runtime artifacts — regenerated, not needed to run the app
 __pycache__/

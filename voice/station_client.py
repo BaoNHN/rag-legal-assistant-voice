@@ -70,11 +70,15 @@ _client = VoiceStationClient.from_key_file(
     KEY_PATH,
     base_url=_load_station_url_override() or os.getenv("VOICE_STATION_URL", "http://127.0.0.1:8090"),
     request_timeout=int(os.getenv("VOICE_STATION_TIMEOUT", "15")),
-    # Local RVC fallback (no Colab endpoint configured) reloads the model fresh
-    # every call via subprocess -- measured ~34s for a short phrase on this
-    # hardware, so the old 30s default was cutting it off just before it
-    # finished. 90s covers that with real margin for longer answers.
-    speak_timeout=int(os.getenv("VOICE_STATION_SPEAK_TIMEOUT", "90")),
+    # Local RVC fallback (no Colab endpoint configured, or Colab unreachable) reloads
+    # the model fresh every call via subprocess -- originally measured ~34s for a
+    # short phrase, but re-measured 2026-08-13 at 61s clean/uncontended (see
+    # clone-voice-station's voice/rvc_local.py CONVERT_TIMEOUT_SEC comment for why:
+    # PhoWhisper-small now sitting persistently in the same GPU's VRAM is the leading
+    # suspect). The server's own worst case is ~20s Colab-attempt + up to
+    # CONVERT_TIMEOUT_SEC(150)s local fallback = ~170s; this must stay above that or
+    # the client gives up and reports failure before the server would even finish.
+    speak_timeout=int(os.getenv("VOICE_STATION_SPEAK_TIMEOUT", "180")),
     upload_timeout=int(os.getenv("VOICE_STATION_UPLOAD_TIMEOUT", "30")),
 )
 
