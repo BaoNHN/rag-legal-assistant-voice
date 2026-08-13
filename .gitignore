@@ -21,8 +21,10 @@ __pycache__/
 /eval_results_*.xlsx
 *.log
 
-# Thesis writing tools — not needed to run the app, kept local-only
+# Thesis writing tools/output — not needed to run the app, kept local-only
 /thesis_diagrams/
+/Thesis_Defense_24MSE23204.pptx
+/Thesis_bao24mse23204*.docx
 
 # Ad-hoc backups / debug screenshots — not source, kept local-only
 *.docx.bak*
