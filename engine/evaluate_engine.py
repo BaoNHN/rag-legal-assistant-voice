@@ -25,8 +25,9 @@ if BASE_DIR not in sys.path:
 _RAG_ERROR_TEXT = "Lỗi hệ thống"
 
 # Judge model for _llm_score — deliberately NOT the same model rag_engine.py
-# uses to generate answers (llama-3.1-8b-instant stays there; its answers
-# were consistently fine all session, only the JUDGE was unreliable).
+# uses to generate answers (openai/gpt-oss-20b stays there as of the
+# 2026-08-14 migration off the decommissioned llama-3.1-8b-instant; its
+# answers were consistently fine all session, only the JUDGE was unreliable).
 # llama-3.1-8b-instant as judge repeatedly hallucinated on clean, correct
 # answers — invented reasons that contradicted the text it was shown (e.g.
 # "không trích dẫn đúng điều luật" for an answer that plainly cites the

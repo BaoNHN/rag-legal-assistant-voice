@@ -93,7 +93,7 @@ retriever = vectorstore.as_retriever(search_kwargs={"k": 5})
 # =========================
 # LLM
 # =========================
-LLM_MODEL = "llama-3.1-8b-instant"
+LLM_MODEL = "openai/gpt-oss-20b"  # migrated 2026-08-14: llama-3.1-8b-instant decommissioned by Groq 2026-08-16
 
 llm = ChatGroq(
     api_key=current_key(),

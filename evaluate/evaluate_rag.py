@@ -156,7 +156,7 @@ def llm_score(question: str, generated: str, expected: str,
     Returns scores dict.
     """
     from engine.groq_keys import current_key
-    llm = ChatGroq(api_key=groq_api_key or current_key(), model="llama-3.1-8b-instant", temperature=0)
+    llm = ChatGroq(api_key=groq_api_key or current_key(), model="openai/gpt-oss-20b", temperature=0)
 
     prompt = f"""Bạn là giáo viên chấm điểm câu trả lời pháp lý.
 
