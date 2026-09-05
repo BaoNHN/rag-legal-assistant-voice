@@ -36,3 +36,4 @@ error*.png
 .idea/
 terminal.txt
 ocr_raw_output.txt
+ai_change_log.txt

@@ -29,31 +29,22 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 KEY_PATH = os.path.join(BASE_DIR, "voice_station_key.txt")
 
 # Local STT needs a working ffmpeg to decode browser mic audio (webm/opus) --
-# on this machine, the conda-forge ffmpeg on PATH in the shared rag_env fails
-# to launch at all (STATUS_ENTRYPOINT_NOT_FOUND, a DLL conflict with its
-# dynamically-linked build; confirmed for real via `ffmpeg -version` producing
-# no output and no error). clone-voice-station already ships a static ffmpeg
-# binary that sidesteps this (its own voice/stt.py, bin/ffmpeg.exe) -- reuse
-# that instead of bundling a second copy here. clone_voice_client's local_stt
-# module reads CLONE_VOICE_FFMPEG_DIR at its own import time (lazy, only when
-# transcribe_local() is first called), so this must be set before then; doing
-# it here at station_client's own import time (this module is imported once,
-# early, at app startup) guarantees that. A no-op if the sibling repo isn't
-# at this relative path (e.g. a deployment without clone-voice-station
-# checked out alongside) -- local STT then falls back to whatever ffmpeg is
-# on PATH, same as before this fix.
+# the conda-forge ffmpeg on PATH in the shared rag_env fails to launch on
+# this machine, so this reuses clone-voice-station's own static binary
+# instead of bundling a second copy. Must run before clone_voice_client's
+# local_stt module reads CLONE_VOICE_FFMPEG_DIR at its own import time,
+# hence doing it here at station_client's import time. A no-op if the
+# sibling repo isn't checked out at this relative path.
 _SIBLING_FFMPEG_DIR = os.path.join(os.path.dirname(BASE_DIR), "clone-voice-station", "bin")
 if os.path.isfile(os.path.join(_SIBLING_FFMPEG_DIR, "ffmpeg.exe")):
     os.environ.setdefault("CLONE_VOICE_FFMPEG_DIR", _SIBLING_FFMPEG_DIR)
 
-# Live-adjustable clone-voice-station URL (added 2026-08-12): for a local demo
-# where clone-voice-station is tunnelled through ngrok (a different URL every
-# run), editing VOICE_STATION_URL and restarting the whole app is slower than
-# a manager just pasting the new URL into /admin/voice_models. This file, if
-# present, wins over the env var at startup; see get_station_url()/
-# set_station_url() below for the runtime path -- VoiceStationClient.base_url
-# is a plain mutable attribute read fresh on every call, so updating it here
-# takes effect immediately, no restart needed.
+# Live-adjustable clone-voice-station URL: for a local demo where the
+# station is tunnelled through ngrok, pasting a new URL into
+# /admin/voice_models beats editing VOICE_STATION_URL and restarting. This
+# file, if present, wins over the env var at startup; VoiceStationClient.
+# base_url is a plain mutable attribute read fresh on every call, so
+# updating it via set_station_url() below takes effect immediately.
 STATION_URL_OVERRIDE_PATH = os.path.join(BASE_DIR, "voice_station_url_override.txt")
 
 
@@ -70,14 +61,9 @@ _client = VoiceStationClient.from_key_file(
     KEY_PATH,
     base_url=_load_station_url_override() or os.getenv("VOICE_STATION_URL", "http://127.0.0.1:8090"),
     request_timeout=int(os.getenv("VOICE_STATION_TIMEOUT", "15")),
-    # Local RVC fallback (no Colab endpoint configured, or Colab unreachable) reloads
-    # the model fresh every call via subprocess -- originally measured ~34s for a
-    # short phrase, but re-measured 2026-08-13 at 61s clean/uncontended (see
-    # clone-voice-station's voice/rvc_local.py CONVERT_TIMEOUT_SEC comment for why:
-    # PhoWhisper-small now sitting persistently in the same GPU's VRAM is the leading
-    # suspect). The server's own worst case is ~20s Colab-attempt + up to
-    # CONVERT_TIMEOUT_SEC(150)s local fallback = ~170s; this must stay above that or
-    # the client gives up and reports failure before the server would even finish.
+    # The server's own worst case is ~20s Colab-attempt + up to
+    # CONVERT_TIMEOUT_SEC(150)s local RVC fallback = ~170s; this must stay
+    # above that or the client gives up before the server would even finish.
     speak_timeout=int(os.getenv("VOICE_STATION_SPEAK_TIMEOUT", "180")),
     upload_timeout=int(os.getenv("VOICE_STATION_UPLOAD_TIMEOUT", "30")),
 )
@@ -169,14 +155,12 @@ def transcribe(filename: str, content: bytes, mime: str = None, language: str = 
     return _client.transcribe(filename, content, mime=mime, language=language)
 
 
-# ── Local STT (added 2026-08-12) ─────────────────────────────────────────────
+# ── Local STT ────────────────────────────────────────────────────────────────
 # Lets an admin download a .stt-pack.zip from clone-voice-station's STT Lab
-# (/stt-lab, once an adapter finishes training) and run Whisper for this
-# app's own mic transcription right in this process, via
-# clone_voice_client.local_stt / VoiceStationClient.transcribe_local() --
-# instead of every request always calling clone-voice-station over the
-# network. Requires `pip install clone-voice-client[local]` (openai-whisper +
-# torch + transformers + peft); if that extra isn't installed,
+# and run Whisper for this app's own mic transcription right in this
+# process, via clone_voice_client.local_stt, instead of every request
+# calling clone-voice-station over the network. Requires
+# `pip install clone-voice-client[local]`; if that extra isn't installed,
 # transcribe_local() below raises VoiceStationError with an actionable
 # message rather than crashing. Multiple packs can be uploaded; at most one
 # is "active" at a time (or none, for plain untrained-Whisper local mode).
