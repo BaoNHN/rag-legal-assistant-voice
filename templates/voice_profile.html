@@ -276,8 +276,17 @@ h1 {
       <p class="progress-note" id="profileLimitNote"></p>
       <div class="new-profile-form" id="newProfileForm">
         <input type="text" id="newProfileName" placeholder="Đặt tên cho giọng nói mới, ví dụ: Giọng của tôi"/>
+        <select id="newProfileBaseVoice" title="Giọng nền dùng để tổng hợp trước khi chuyển sang giọng của bạn">
+          <option value="vi-VN-HoaiMyNeural">Giọng nền: Nữ</option>
+          <option value="vi-VN-NamMinhNeural">Giọng nền: Nam</option>
+        </select>
         <button id="createProfileBtn">+ Tạo giọng nói</button>
       </div>
+      <p class="progress-note">
+        Chọn giọng nền <strong>cùng giới tính với bạn</strong>. Hệ thống tổng hợp câu trả lời bằng
+        giọng nền rồi mới chuyển sang giọng của bạn — chuyển chéo nam/nữ làm giọng kết quả kém tự
+        nhiên hơn. Có thể đổi lại bất cứ lúc nào, không cần huấn luyện lại.
+      </p>
     </div>
 
     <div class="card" id="recordingCard" style="display:none;">
@@ -376,6 +385,12 @@ function renderProfileRow(p) {
     : `<button class="btn-small" onclick="setDefault(${p.id})">Đặt mặc định</button>`;
   const manageBtn = isOwn ? `<button class="btn-small" onclick="openRecording(${p.id})">Ghi âm mẫu</button>` : '';
   const deleteBtn = isOwn ? `<button class="btn-small danger" onclick="deleteProfile(${p.id})">Xoá</button>` : '';
+  // Only a cloned voice has a base voice to change: a system voice IS its own base.
+  const baseVoiceSel = isOwn ? `
+      <select class="btn-small" title="Giọng nền" onchange="setBaseVoice(${p.id}, this.value)">
+        <option value="vi-VN-HoaiMyNeural" ${p.base_tts_voice === 'vi-VN-HoaiMyNeural' ? 'selected' : ''}>Nền: Nữ</option>
+        <option value="vi-VN-NamMinhNeural" ${p.base_tts_voice === 'vi-VN-NamMinhNeural' ? 'selected' : ''}>Nền: Nam</option>
+      </select>` : '';
   return `
     <div class="profile-row">
       <div>
@@ -383,6 +398,7 @@ function renderProfileRow(p) {
         <div class="profile-sub">${isOwn ? 'Giọng cá nhân' : 'Giọng hệ thống'}${p.error_message ? ' — ' + escapeHtml(p.error_message) : ''}</div>
       </div>
       ${badge}
+      ${baseVoiceSel}
       ${defaultBtn}
       ${manageBtn}
       ${deleteBtn}
@@ -393,6 +409,20 @@ function escapeHtml(s) {
   const div = document.createElement('div');
   div.textContent = s;
   return div.innerHTML;
+}
+
+async function setBaseVoice(profileId, baseVoice) {
+  const res  = await fetch(`/voice/profiles/${profileId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ base_tts_voice: baseVoice })
+  });
+  const data = await res.json();
+  if (data.status !== 'ok') { showToast('❌ ' + (data.message || 'Không đổi được giọng nền')); loadProfiles(); return; }
+  // No retraining needed: the RVC model is independent of the base voice, so this
+  // applies to the next answer the assistant speaks.
+  showToast('✓ Đã đổi giọng nền. Áp dụng ngay ở câu trả lời tiếp theo.');
+  loadProfiles();
 }
 
 async function setDefault(profileId) {
@@ -421,10 +451,11 @@ document.getElementById('createProfileBtn').addEventListener('click', async () =
   const name  = input.value.trim();
   if (!name) { showToast('Vui lòng nhập tên.'); return; }
 
+  const baseVoice = document.getElementById('newProfileBaseVoice').value;
   const res  = await fetch('/voice/profiles', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name })
+    body: JSON.stringify({ name, base_tts_voice: baseVoice })
   });
   const data = await res.json();
   if (data.status !== 'ok') { showToast('❌ ' + (data.message || 'Lỗi')); return; }

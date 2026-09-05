@@ -128,12 +128,14 @@ def list_voice_profiles(external_user_id: str) -> list:
     return _client.list_voice_profiles(external_user_id)
 
 
-def create_voice_profile(external_user_id: str, name: str) -> int:
-    return _client.create_voice_profile(external_user_id, name)
+def create_voice_profile(external_user_id: str, name: str, base_tts_voice: str = None) -> int:
+    return _client.create_voice_profile(external_user_id, name, base_tts_voice=base_tts_voice)
 
 
-def update_voice_profile(profile_id: int, external_user_id: str, name: str = None, is_default: bool = None):
-    return _client.update_voice_profile(profile_id, external_user_id, name=name, is_default=is_default)
+def update_voice_profile(profile_id: int, external_user_id: str, name: str = None,
+                         is_default: bool = None, base_tts_voice: str = None):
+    return _client.update_voice_profile(profile_id, external_user_id, name=name,
+                                        is_default=is_default, base_tts_voice=base_tts_voice)
 
 
 def delete_voice_profile(profile_id: int, external_user_id: str) -> dict:

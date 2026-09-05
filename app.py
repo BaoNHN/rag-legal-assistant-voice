@@ -1104,8 +1104,14 @@ async def create_voice_profile_route(request: Request):
     if not name:
         return JSONResponse({"status": "error", "message": "Vui lòng đặt tên cho giọng nói."}, status_code=400)
 
+    # Which builtin TTS voice the answer is synthesised from before RVC re-voices
+    # it. Sent at creation so a male speaker is not stuck on the station's female
+    # default, which would mean cross-gender conversion on every answer.
+    base_tts_voice = (data.get("base_tts_voice") or "").strip() or None
+
     try:
-        profile_id = station_client.create_voice_profile(external_user_id, name)
+        profile_id = station_client.create_voice_profile(external_user_id, name,
+                                                        base_tts_voice=base_tts_voice)
     except VoiceStationError as e:
         return _voice_error(e)
     return {"status": "ok", "profile_id": profile_id}
@@ -1121,6 +1127,7 @@ async def update_voice_profile_route(profile_id: int, request: Request):
         station_client.update_voice_profile(
             profile_id, external_user_id,
             name=data.get("name"), is_default=data.get("is_default"),
+            base_tts_voice=data.get("base_tts_voice"),
         )
     except VoiceStationError as e:
         return _voice_error(e)
