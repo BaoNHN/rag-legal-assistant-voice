@@ -863,6 +863,21 @@ rag-legal-assistant là ứng dụng chủ (host app) của luận văn: trợ l
 
 Chạy lại các test: xem mục 12 của `clone-voice-station/HUONG_DAN_DEMO.md`.
 
+## 17. Chạy Giọng Nói Theo Đường Local (Không Cần Colab)
+
+Các mục giọng nói ở trên mặc định dùng Colab. Khi không có Colab, ứng dụng vẫn chạy được vì phần giọng nói do `clone-voice-station` xử lý:
+
+1. Xoá endpoint RVC của station (hoặc để trống trong mục "Cấu hình Endpoint RVC", 12.4): station tự dùng PhoWhisper-small cho STT và RVC chạy trong tiến trình của nó.
+   ```bash
+   cd ../clone-voice-station
+   python -c "from database.database import set_setting; set_setting('rvc_endpoint', '')"
+   ```
+2. Chạy `start_all.bat` như bình thường (hoặc bật station ở cổng 8090 rồi chạy `python app.py`). Trang quản lý giọng nói (Figure 8) có tuỳ chọn Whisper local cho STT.
+3. Đọc to câu trả lời vẫn dùng edge-TTS (cần Internet). Giọng nhân bản đã huấn luyện được chuyển qua RVC local; nếu station không có model local đã cache thì trả giọng TTS thường, không có đoạn thông báo AI.
+4. Lượt đầu chậm vì nạp model (PhoWhisper-small local, RVC local); các lượt sau nhanh hơn. Huấn luyện giọng mới trên máy không có GPU rất lâu (số epoch tự giảm), nên huấn luyện vẫn nên làm trên Colab.
+
+Chạy lại các test case ở chế độ này: xem mục 12 của `clone-voice-station/HUONG_DAN_DEMO.md` (`flow_01`, `flow_03 --path local`, `flow_04`, `flow_05`; TC-02 và TC-11 cần Colab nên được báo SKIP).
+
 ## Ghi Chú Thêm
 
 - Hệ thống hỗ trợ **đa phiên đồng thời** — nhiều người dùng có thể truy cập cùng lúc

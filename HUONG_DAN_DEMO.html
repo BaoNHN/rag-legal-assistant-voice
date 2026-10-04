@@ -174,6 +174,8 @@
 <li><a href="#khong-tao-uoc-khong-huan-luyen-uoc-giong-noi-ca-nhan">Không Tạo Được / Không Huấn Luyện Được Giọng Nói Cá Nhân</a></li>
 </ul>
 </li>
+<li><a href="#16-vai-tro-trong-bo-test-lai-cua-luan-van">16. Vai Trò Trong Bộ Test Lại Của Luận Văn</a></li>
+<li><a href="#17-chay-giong-noi-theo-uong-local-khong-can-colab">17. Chạy Giọng Nói Theo Đường Local (Không Cần Colab)</a></li>
 <li><a href="#ghi-chu-them">Ghi Chú Thêm</a></li>
 </ul>
 </li>
@@ -1412,6 +1414,19 @@ python database/build_db_from_dataset_updated.py
 <li>Độ trễ <code>ask_rag</code> (14,95 s, 30 câu) chỉ là bối cảnh cho Figure 6, không nằm trong luồng nào.</li>
 </ul>
 <p>Chạy lại các test: xem mục 12 của <code>clone-voice-station/HUONG_DAN_DEMO.md</code>.</p>
+<hr />
+<h2 id="17-chay-giong-noi-theo-uong-local-khong-can-colab">17. Chạy Giọng Nói Theo Đường Local (Không Cần Colab)</h2>
+<p>Các mục giọng nói ở trên mặc định dùng Colab. Khi không có Colab, ứng dụng vẫn chạy được vì phần giọng nói do <code>clone-voice-station</code> xử lý:</p>
+<ol>
+<li>Xoá endpoint RVC của station (hoặc để trống trong mục &quot;Cấu hình Endpoint RVC&quot;, 12.4): station tự dùng PhoWhisper-small cho STT và RVC chạy trong tiến trình của nó.
+<pre><code class="language-bash">cd ../clone-voice-station
+python -c &quot;from database.database import set_setting; set_setting('rvc_endpoint', '')&quot;
+</code></pre></li>
+<li>Chạy <code>start_all.bat</code> như bình thường (hoặc bật station ở cổng 8090 rồi chạy <code>python app.py</code>). Trang quản lý giọng nói (Figure 8) có tuỳ chọn Whisper local cho STT.</li>
+<li>Đọc to câu trả lời vẫn dùng edge-TTS (cần Internet). Giọng nhân bản đã huấn luyện được chuyển qua RVC local; nếu station không có model local đã cache thì trả giọng TTS thường, không có đoạn thông báo AI.</li>
+<li>Lượt đầu chậm vì nạp model (PhoWhisper-small local, RVC local); các lượt sau nhanh hơn. Huấn luyện giọng mới trên máy không có GPU rất lâu (số epoch tự giảm), nên huấn luyện vẫn nên làm trên Colab.</li>
+</ol>
+<p>Chạy lại các test case ở chế độ này: xem mục 12 của <code>clone-voice-station/HUONG_DAN_DEMO.md</code> (<code>flow_01</code>, <code>flow_03 --path local</code>, <code>flow_04</code>, <code>flow_05</code>; TC-02 và TC-11 cần Colab nên được báo SKIP).</p>
 <hr />
 <h2 id="ghi-chu-them">Ghi Chú Thêm</h2>
 <ul>
