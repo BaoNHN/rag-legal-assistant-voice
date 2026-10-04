@@ -1403,6 +1403,16 @@ python database/build_db_from_dataset_updated.py
 - Đã đạt giới hạn <strong>2 giọng nhân bản/người dùng</strong> — phải xoá bớt giọng cũ trước khi tạo giọng mới</p>
 <p><strong>Khắc phục:</strong> Admin có thể chủ động <strong>huấn luyện lại</strong> giọng bị lỗi qua trang <code>/admin/voice_models</code> (mục 12.3) mà không cần người dùng ghi âm lại từ đầu.</p>
 <hr />
+<h2 id="16-vai-tro-trong-bo-test-lai-cua-luan-van">16. Vai Trò Trong Bộ Test Lại Của Luận Văn</h2>
+<p>rag-legal-assistant là ứng dụng chủ (host app) của luận văn: trợ lý RAG có sẵn, thêm giọng nói bằng cách gọi <code>clone-voice-station</code> qua <code>voice/station_client.py</code>. Tầng RAG/LLM nằm ngoài phạm vi đánh giá; các test case của luận văn chạy ở station.</p>
+<ul>
+<li>Đường gọi: <code>app.py</code> (các route giọng nói) → <code>voice/station_client.py</code> → <code>/api/transcribe</code>, <code>/api/speak</code> của station. TC-01…TC-19 chính là hợp đồng HTTP này.</li>
+<li>Figure 8 là trang quản lý mô hình giọng nói của ứng dụng này (kết nối station, tuỳ chọn Whisper local, các profile đã huấn luyện).</li>
+<li><code>voice_station_key.txt</code> ở thư mục này được các luồng retest dùng làm nguồn API key dự phòng.</li>
+<li>Độ trễ <code>ask_rag</code> (14,95 s, 30 câu) chỉ là bối cảnh cho Figure 6, không nằm trong luồng nào.</li>
+</ul>
+<p>Chạy lại các test: xem mục 12 của <code>clone-voice-station/HUONG_DAN_DEMO.md</code>.</p>
+<hr />
 <h2 id="ghi-chu-them">Ghi Chú Thêm</h2>
 <ul>
 <li>Hệ thống hỗ trợ <strong>đa phiên đồng thời</strong> — nhiều người dùng có thể truy cập cùng lúc</li>

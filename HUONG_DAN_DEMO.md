@@ -852,6 +852,17 @@ Script này xóa các đoạn văn bản 67/VBHN-VPQH bị chunk sai và build l
 
 ---
 
+## 16. Vai Trò Trong Bộ Test Lại Của Luận Văn
+
+rag-legal-assistant là ứng dụng chủ (host app) của luận văn: trợ lý RAG có sẵn, thêm giọng nói bằng cách gọi `clone-voice-station` qua `voice/station_client.py`. Tầng RAG/LLM nằm ngoài phạm vi đánh giá; các test case của luận văn chạy ở station.
+
+- Đường gọi: `app.py` (các route giọng nói) → `voice/station_client.py` → `/api/transcribe`, `/api/speak` của station. TC-01…TC-19 chính là hợp đồng HTTP này.
+- Figure 8 là trang quản lý mô hình giọng nói của ứng dụng này (kết nối station, tuỳ chọn Whisper local, các profile đã huấn luyện).
+- `voice_station_key.txt` ở thư mục này được các luồng retest dùng làm nguồn API key dự phòng.
+- Độ trễ `ask_rag` (14,95 s, 30 câu) chỉ là bối cảnh cho Figure 6, không nằm trong luồng nào.
+
+Chạy lại các test: xem mục 12 của `clone-voice-station/HUONG_DAN_DEMO.md`.
+
 ## Ghi Chú Thêm
 
 - Hệ thống hỗ trợ **đa phiên đồng thời** — nhiều người dùng có thể truy cập cùng lúc
